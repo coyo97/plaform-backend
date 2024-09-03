@@ -1,0 +1,36 @@
+{
+  "name": "api",
+  "version": "1.0.0",
+  "description": "api backend",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "nodemon --config nodemon.json src/server.ts",
+    "start": "node ./dist/server.js",
+    "tsc": "tsc --watch",
+    "test": "npm run jest"
+  },
+  "keywords": [
+    "api"
+  ],
+  "author": "Coyo",
+  "license": "ISC",
+  "dependencies": {
+    "@types/mongoose": "^5.11.97",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "http-status-codes": "^2.3.0",
+    "mongoose": "^8.4.0",
+    "mongose": "^0.0.2-security"
+  },
+  "devDependencies": {
+    "@jest/types": "^29.6.3",
+    "@types/cors": "^2.8.17",
+    "@types/express": "^4.17.21",
+    "install": "^0.13.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.4.5"
+  }
+}
