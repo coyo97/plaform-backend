@@ -35,6 +35,7 @@ export default class App {
 	private initRoutes(service: string): void {
 		//this.appServer.use(`${this.apiPrefix}/${this.apiVersion}/${service}`, userRoute);//creando ruta
 		const userController = new UserController(this, `/${this.apiVersion}/${this.apiPrefix}/${service}`);
+		userController.initLoginRoute();
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;

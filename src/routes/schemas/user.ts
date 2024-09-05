@@ -7,6 +7,7 @@ export interface IRoles extends Document {
 	permission: string[];
 }
 export interface IUser extends Document {
+	_id: mongoose.Types.ObjectId;
 	username: string;
 	email: string;
 	password: string;
