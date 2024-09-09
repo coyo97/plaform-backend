@@ -1,9 +1,11 @@
 import express, { Express } from "express";
 import {parseEnvNumber, parseEnvString} from "./utils";
 import { UserController } from "./routes/users";
+import { RoleController } from "./routes/roles"; // Importa el controlador de roles si es necesario
 import * as dotenv from "dotenv";
 import  mongoose, {Mongoose, connection} from 'mongoose';
 import cors from 'cors';
+import {PublicationController} from "./routes/publications";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -36,6 +38,8 @@ export default class App {
 		//this.appServer.use(`${this.apiPrefix}/${this.apiVersion}/${service}`, userRoute);//creando ruta
 		const userController = new UserController(this, `/${this.apiVersion}/${this.apiPrefix}/${service}`);
 		userController.initLoginRoute();
+        new RoleController(this, `/${this.apiVersion}/${this.apiPrefix}`); // Instanc
+		new PublicationController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;

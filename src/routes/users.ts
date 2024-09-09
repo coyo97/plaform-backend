@@ -3,6 +3,7 @@ import * as dotenv from "dotenv";
 import { StatusCodes } from "http-status-codes";
 import App from '../app';
 import { UserModel, IUser } from "./schemas/user";
+import { RoleModel, IRole } from './schemas/role';
 import { Model } from "mongoose";
 import bcrypt from 'bcrypt';
 import { generateToken } from "../authentication/authUser";
@@ -31,8 +32,12 @@ export class UserController {
 
         // Ruta para obtener la lista de usuarios
         this.express.get(this.route, async (req, res) => {
-            const list = await this.user.find();
-            res.status(StatusCodes.ACCEPTED).json({ list });
+            try {
+                const list = await this.user.find().populate('roles');
+                res.status(StatusCodes.ACCEPTED).json({ list });
+            } catch (error) {
+                res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
+            }
         });
 
         // Ruta para registrar un nuevo usuario
@@ -43,10 +48,23 @@ export class UserController {
             try {
                 // Hashear la contraseña antes de guardar
                 const hashedPassword = await bcrypt.hash(password, saltRounds);
-                const roles: any = { name: 'admi', description: 'user', permissions: ['user'] };
-                const rolesList = [];
-                rolesList.push(roles);
-                const requestObject = { username, email, password: hashedPassword, roles: rolesList };
+
+                // Verificar y asignar el rol de usuario básico si no existe un rol específico
+                let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'admi' }).exec();
+
+                // Si no existe el rol, puedes crear uno por defecto o manejar el error
+                if (!role) {
+                    // Opcional: Crear un rol 'user' básico
+                    role = new (RoleModel(this.app.getClientMongoose()))({
+                        name: 'admi',
+                        description: 'Usuario básico',
+                        permissions: [{ name: 'basic_access', description: 'Acceso básico' }],
+                    });
+                    await role.save();
+                }
+
+                // Asignar el rol encontrado o creado al usuario
+                const requestObject = { username, email, password: hashedPassword, roles: [role._id] };
                 const newUser = new this.user(requestObject);
                 const result = await newUser.save();
 
@@ -57,7 +75,8 @@ export class UserController {
 
                 res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
             } catch (error) {
-                res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error creating user", error });
+                console.error('Error creating user:', error);
+                res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
             }
         });
 
@@ -65,15 +84,23 @@ export class UserController {
         this.express.put(`${this.route}/:id`, async (req, res) => {
             const { email } = req.body;
             const { id } = req.params;
-            const result = await this.user.findOneAndUpdate({ _id: id }, { email: email });
-            res.status(StatusCodes.OK).json({ msg: 'User service' });
+            try {
+                const result = await this.user.findOneAndUpdate({ _id: id }, { email });
+                res.status(StatusCodes.OK).json({ msg: 'User updated' });
+            } catch (error) {
+                res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error updating user", error });
+            }
         });
 
         // Ruta para eliminar un usuario
         this.express.delete(`${this.route}/:id`, async (req, res) => {
             const { id } = req.params;
-            const result = await this.user.findOneAndDelete({ _id: id });
-            res.status(StatusCodes.OK).json({ msg: result });
+            try {
+                const result = await this.user.findOneAndDelete({ _id: id });
+                res.status(StatusCodes.OK).json({ msg: 'User deleted', result });
+            } catch (error) {
+                res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error deleting user", error });
+            }
         });
 
         // Inicializar la ruta de login
@@ -100,6 +127,7 @@ export class UserController {
                 const token = generateToken(user._id.toString());
                 res.status(StatusCodes.OK).json({ token });
             } catch (error) {
+                console.error('Error logging in:', error);
                 res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });
             }
         });
