@@ -2,10 +2,13 @@ import express, { Express } from "express";
 import {parseEnvNumber, parseEnvString} from "./utils";
 import { UserController } from "./routes/users";
 import { RoleController } from "./routes/roles"; // Importa el controlador de roles si es necesario
+import { upload } from "./middlware/upload";
+import path from 'path';
 import * as dotenv from "dotenv";
 import  mongoose, {Mongoose, connection} from 'mongoose';
 import cors from 'cors';
 import {PublicationController} from "./routes/publications";
+import { ProfileController } from "./routes/profile";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -31,6 +34,8 @@ export default class App {
 		this.appServer.use(cors());
 		this.appServer.use(express.json());
 		this.appServer.use(express.urlencoded({extended: true}));//para habilitar el ruteo
+		// Configuración para servir archivos estáticos desde la carpeta 'uploads'
+		this.appServer.use('/uploads', express.static(path.join(__dirname, '../uploads')));
 		this.setupDatabase();
 		this.initRoutes('users')
 	}
@@ -40,6 +45,7 @@ export default class App {
 		userController.initLoginRoute();
         new RoleController(this, `/${this.apiVersion}/${this.apiPrefix}`); // Instanc
 		new PublicationController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new ProfileController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;
