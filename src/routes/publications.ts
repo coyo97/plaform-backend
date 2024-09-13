@@ -50,12 +50,34 @@ export class PublicationController {
 			authMiddleware,
 			this.deletePublication.bind(this)
 		);
-		 // Ruta para obtener las publicaciones del usuario autenticado
-    this.app.getAppServer().get(
-        `${this.route}/user-publications`, // Nueva ruta
-        authMiddleware,
-        this.listUserPublications.bind(this) // Llama al método que filtra por usuario autenticado
-    );
+
+
+
+
+
+
+
+		// Ruta para obtener las publicaciones del usuario autenticado
+		this.app.getAppServer().get(
+			`${this.route}/user-publications`, // Nueva ruta
+			authMiddleware,
+			this.listUserPublications.bind(this) // Llama al método que filtra por usuario autenticado
+		);
+
+		// Ruta para actualizar una publicación existente
+		this.app.getAppServer().put(
+			`${this.route}/user-publications/:id`,
+			authMiddleware,
+			upload.single('file'), // Asegura la subida de archivo en la actualización
+			this.updateUserPublication.bind(this)
+		);
+
+		// Ruta para eliminar una publicación
+		this.app.getAppServer().delete(
+			`${this.route}/publications/:id`,
+			authMiddleware,
+			this.deleteUserPublication.bind(this)
+		);
 	}
 
 	// Método para listar todas las publicaciones
@@ -126,23 +148,85 @@ export class PublicationController {
 			res.status(StatusCodes.BAD_REQUEST).json({ message: 'Error al eliminar la publicación', error });
 		}
 	}
-// Cambia el tipo de retorno de Promise<void> a Promise<Response>
-private async listUserPublications(req: AuthRequest, res: Response): Promise<Response> {
-    try {
-        const userId = req.userId; // Obtén el userId del usuario autenticado
-        
-        if (!userId) {
-            return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-        }
+	// Cambia el tipo de retorno de Promise<void> a Promise<Response>
+	private async listUserPublications(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const userId = req.userId; // Obtén el userId del usuario autenticado
 
-        // Filtra las publicaciones por el userId del usuario autenticado
-        const publications = await this.publicationModel.find({ author: userId }).exec();
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+			}
 
-        return res.status(StatusCodes.OK).json({ publications });
-    } catch (error) {
-        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones del usuario', error });
-    }
-}
+			// Filtra las publicaciones por el userId del usuario autenticado
+			const publications = await this.publicationModel.find({ author: userId }).exec();
+
+			return res.status(StatusCodes.OK).json({ publications });
+		} catch (error) {
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones del usuario', error });
+		}
+	}
+
+	// Método para actualizar una publicación del usuario autenticado
+	// Método para editar una publicación del usuario autenticado
+	// Método para editar una publicación del usuario autenticado
+	private async updateUserPublication(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { id } = req.params;
+			const { title, content, tags } = req.body;
+			const userId = req.userId;
+
+			// Verifica si la publicación existe y si pertenece al usuario autenticado
+			const publication = await this.publicationModel.findOne({ _id: id, author: userId }).exec();
+			if (!publication) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'No tienes permiso para editar esta publicación' });
+			}
+
+			// Actualiza la publicación con los nuevos datos
+			const updateData: Partial<IPublication> = { title, content, tags: JSON.parse(tags) };
+			console.log('Datos de actualización:', updateData);
+
+			// Si hay una nueva imagen, actualiza el campo de imagen
+			if (req.file) {
+				updateData.filePath = req.file.path;
+				updateData.fileType = req.file.mimetype;
+			}
+
+			// Guarda los cambios
+			const updatedPublication = await this.publicationModel.findByIdAndUpdate(
+				id,
+				updateData,
+				{ new: true } // El { new: true } asegura que obtengas el documento actualizado
+			).exec();
+
+			console.log('Publicación actualizada:', updatedPublication);
+			return res.status(StatusCodes.OK).json({ publication: updatedPublication });
+		} catch (error) {
+			console.error('Error al editar la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al editar la publicación', error });
+		}
+	}
+
+
+
+
+	// Método para eliminar una publicación del usuario autenticado
+	private async deleteUserPublication(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { id } = req.params;
+			const userId = req.userId;
+
+			const publication = await this.publicationModel.findOne({ _id: id, author: userId }).exec();
+			if (!publication) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'No tienes permiso para eliminar esta publicación' });
+			}
+
+			await this.publicationModel.findByIdAndDelete(id).exec();
+			return res.status(StatusCodes.OK).json({ message: 'Publicación eliminada correctamente' });
+		} catch (error) {
+			console.error('Error al eliminar la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar la publicación', error });
+		}
+	}
 
 }
 

@@ -5,6 +5,9 @@ import App from '../app';
 import { authMiddleware } from '../middlware/authMiddlewares';
 import { upload } from '../middlware/upload';
 
+
+import { UserModel } from './schemas/user';
+
 interface AuthRequest extends Request {
 	userId?: string;
 }
@@ -14,16 +17,22 @@ export class ProfileController {
 	private app: App;
 	private profileModel: ReturnType<typeof ProfileModel>;
 
+	private userModel: ReturnType<typeof UserModel>;
+	
 	constructor(app: App, route: string) {
 		this.route = route;
 		this.app = app;
 		this.profileModel = ProfileModel(this.app.getClientMongoose());
+		
+		this.userModel = UserModel(this.app.getClientMongoose());
 		this.initRoutes();
 	}
 
 	private initRoutes(): void {
 		this.app.getAppServer().get(`${this.route}/profile`, authMiddleware, this.getProfile.bind(this));
 		this.app.getAppServer().put(`${this.route}/profile`, authMiddleware, upload.single('profilePicture'), this.updateProfile.bind(this));
+
+		this.app.getAppServer().get(`${this.route}/authors/:id`, authMiddleware, this.getAuthorProfile.bind(this));
 	}
 
 	private async getProfile(req: AuthRequest, res: Response): Promise<Response> {
@@ -82,5 +91,35 @@ export class ProfileController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al actualizar el perfil', error });
 		}
 	}
+
+
+	// Método para obtener el perfil de un autor específico
+    private async getAuthorProfile(req: Request, res: Response): Promise<Response> {
+        try {
+            const { id } = req.params;
+
+            // Obtener el perfil del autor utilizando su ID
+            const author = await this.userModel.findById(id).select('-password').exec(); // Excluir la contraseña
+            const profile = await this.profileModel.findOne({ user: id }).exec();
+
+            if (!author) {
+                return res.status(StatusCodes.NOT_FOUND).json({ message: 'Autor no encontrado' });
+            }
+
+            // Combina la información básica del usuario con los detalles del perfil
+            const authorProfile = {
+                username: author.username,
+                email: author.email,
+                bio: profile?.bio || '',
+                interests: profile?.interests || [],
+                profilePicture: profile?.profilePicture || '',
+            };
+
+            return res.status(StatusCodes.OK).json({ author: authorProfile });
+        } catch (error) {
+            console.error('Error al obtener el perfil del autor:', error);
+            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener el perfil del autor', error });
+        }
+    }
 }
 
