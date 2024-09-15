@@ -9,6 +9,8 @@ import  mongoose, {Mongoose, connection} from 'mongoose';
 import cors from 'cors';
 import {PublicationController} from "./routes/publications";
 import { ProfileController } from "./routes/profile";
+import { CommentController } from "./routes/comments";
+import { CareerController } from "./routes/career";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -24,6 +26,7 @@ export default class App {
 	private databasePassword: string = parseEnvString('DATABASE_PASSWORD' || '');
 	private databaseName: string = parseEnvString('DATABASE_NAME' || '');
 	private databaseClient: Mongoose;
+
 	constructor() {
 		this.databaseClient = mongoose;
 		this.appServer = express();
@@ -46,6 +49,9 @@ export default class App {
         new RoleController(this, `/${this.apiVersion}/${this.apiPrefix}`); // Instanc
 		new PublicationController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new ProfileController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+
+		new CommentController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new CareerController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;

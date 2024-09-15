@@ -48,44 +48,43 @@ export class UserController {
 		});
 
 		// Ruta para registrar un nuevo usuario
-		this.express.post(this.route, async (req, res) => {
-			const { username, email, password } = req.body;
-			const saltRounds = 10;
+// Ruta para registrar un nuevo usuario con carreras
+this.express.post(this.route, async (req, res) => {
+    const { username, email, password, careers } = req.body; // Agrega careers al cuerpo de la solicitud
+    const saltRounds = 10;
 
-			try {
-				// Hashear la contraseña antes de guardar
-				const hashedPassword = await bcrypt.hash(password, saltRounds);
+    try {
+        // Hashear la contraseña antes de guardar
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-				// Verificar y asignar el rol de usuario básico si no existe un rol específico
-				let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'admi' }).exec();
+        // Verificar y asignar el rol de usuario básico si no existe un rol específico
+        let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'admi' }).exec();
 
-				// Si no existe el rol, puedes crear uno por defecto o manejar el error
-				if (!role) {
-					// Opcional: Crear un rol 'user' básico
-					role = new (RoleModel(this.app.getClientMongoose()))({
-						name: 'admi',
-						description: 'Usuario básico',
-						permissions: [{ name: 'basic_access', description: 'Acceso básico' }],
-					});
-					await role.save();
-				}
+        if (!role) {
+            role = new (RoleModel(this.app.getClientMongoose()))({
+                name: 'admi',
+                description: 'Usuario básico',
+                permissions: [{ name: 'basic_access', description: 'Acceso básico' }],
+            });
+            await role.save();
+        }
 
-				// Asignar el rol encontrado o creado al usuario
-				const requestObject = { username, email, password: hashedPassword, roles: [role._id] };
-				const newUser = new this.user(requestObject);
-				const result = await newUser.save();
+        // Asignar carreras seleccionadas y el rol encontrado o creado al usuario
+        const requestObject = { username, email, password: hashedPassword, roles: [role._id], careers };
+        const newUser = new this.user(requestObject);
+        const result = await newUser.save();
 
-				if (result) {
-					res.status(StatusCodes.CREATED).json({ msg: "User created" });
-					return;
-				}
+        if (result) {
+            res.status(StatusCodes.CREATED).json({ msg: "User created", user: result });
+            return;
+        }
 
-				res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
-			} catch (error) {
-				console.error('Error creating user:', error);
-				res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
-			}
-		});
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
+    } catch (error) {
+        console.error('Error creating user:', error);
+        res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
+    }
+});
 
 		// Ruta para actualizar un usuario
 		this.express.put(`${this.route}/:id`, async (req, res) => {
