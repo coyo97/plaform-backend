@@ -134,7 +134,7 @@ this.express.post(this.route, async (req, res) => {
 				}
 
 				const token = generateToken(user._id.toString());
-				res.status(StatusCodes.OK).json({ token });
+				res.status(StatusCodes.OK).json({ token, userId: user._id });
 			} catch (error) {
 				console.error('Error logging in:', error);
 				res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });

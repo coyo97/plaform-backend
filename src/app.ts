@@ -1,5 +1,5 @@
 import express, { Express } from "express";
-import {parseEnvNumber, parseEnvString} from "./utils";
+import {parseEnvBoolean, parseEnvNumber, parseEnvString} from "./utils";
 import { UserController } from "./routes/users";
 import { RoleController } from "./routes/roles"; // Importa el controlador de roles si es necesario
 import { upload } from "./middlware/upload";
@@ -11,6 +11,12 @@ import {PublicationController} from "./routes/publications";
 import { ProfileController } from "./routes/profile";
 import { CommentController } from "./routes/comments";
 import { CareerController } from "./routes/career";
+
+import SocketController from "./routes/socket";
+import { createServer, Server as HttpServer } from 'http';
+import { Server as SocketIOServer } from 'socket.io';
+import MessageController from "./routes/message";
+import GroupController from "./routes/group";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -27,9 +33,23 @@ export default class App {
 	private databaseName: string = parseEnvString('DATABASE_NAME' || '');
 	private databaseClient: Mongoose;
 
+	private httpServer: HttpServer; // Servidor HTTP
+	private io: SocketIOServer;      // Servidor Socket.IO
+	private useCors: boolean = parseEnvBoolean('USE_CORS' || '');
+
 	constructor() {
 		this.databaseClient = mongoose;
 		this.appServer = express();
+
+		// Inicializa el servidor HTTP y Socket.IO
+		this.httpServer = createServer(this.appServer);
+		this.io = new SocketIOServer(this.httpServer, {
+			cors: {
+				origin: '*', // Configura esto según tus necesidades
+				methods: ['GET', 'POST'],
+			},
+		});
+
 		this.setupServer();
 	}
 	private setupServer(): void{
@@ -39,8 +59,13 @@ export default class App {
 		this.appServer.use(express.urlencoded({extended: true}));//para habilitar el ruteo
 		// Configuración para servir archivos estáticos desde la carpeta 'uploads'
 		this.appServer.use('/uploads', express.static(path.join(__dirname, '../uploads')));
+
+		this.setupMiddlewares();
+		this.configureSockets();
+
 		this.setupDatabase();
 		this.initRoutes('users')
+
 	}
 	private initRoutes(service: string): void {
 		//this.appServer.use(`${this.apiPrefix}/${this.apiVersion}/${service}`, userRoute);//creando ruta
@@ -52,6 +77,9 @@ export default class App {
 
 		new CommentController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new CareerController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+
+		new MessageController(this, `/${this.apiVersion}/${this.apiPrefix}`, this.io);
+		new GroupController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;
@@ -78,5 +106,20 @@ export default class App {
 	}
 	public getClientMongoose(): Mongoose {
 		return this.databaseClient;
+	}
+
+	private setupMiddlewares(): void {
+		this.appServer.use(express.json());
+		if (this.useCors) {
+			this.appServer.use(cors());
+		}
+		// Otros middlewares...
+	}
+
+	private configureSockets(): void {
+		new SocketController(this.io);
+	}
+	public getHttpServer(): HttpServer {
+		return this.httpServer;
 	}
 }
