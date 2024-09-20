@@ -17,6 +17,7 @@ import { createServer, Server as HttpServer } from 'http';
 import { Server as SocketIOServer } from 'socket.io';
 import MessageController from "./routes/message";
 import GroupController from "./routes/group";
+import StreamController from "./routes/stream";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -80,6 +81,7 @@ export default class App {
 
 		new MessageController(this, `/${this.apiVersion}/${this.apiPrefix}`, this.io);
 		new GroupController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new StreamController(this.io, this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;

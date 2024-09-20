@@ -93,14 +93,25 @@ export class PublicationController {
 	}
 
 	// Método para listar todas las publicaciones
-	private async listPublications(req: Request, res: Response): Promise<void> {
-		try {
-			const publications = await this.publicationModel.find().populate('author').exec();
-			res.status(StatusCodes.OK).json({ publications });
-		} catch (error) {
-			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones', error });
-		}
-	}
+private async listPublications(req: Request, res: Response): Promise<void> {
+    try {
+        const publications = await this.publicationModel.find()
+            .populate({
+                path: 'author',
+                select: 'username',
+                populate: {
+                    path: 'profile',
+                    select: 'profilePicture'
+                }
+            })
+            .exec();
+        res.status(StatusCodes.OK).json({ publications });
+    } catch (error) {
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones', error });
+    }
+}
+	
+
 
 	// Método para crear una nueva publicación
 	// Método para actualizar una publicación existente
@@ -271,20 +282,25 @@ export class PublicationController {
 	}
 
 	// Método para listar publicaciones por carrera
-  private async listPublicationsByCareer(req: AuthRequest, res: Response): Promise<void> {
+private async listPublicationsByCareer(req: AuthRequest, res: Response): Promise<void> {
     try {
-      const { careerId } = req.params;
-      const publications = await this.publicationModel
-        .find({ career: careerId })
-        .populate('author')
-        .exec();
-      res.status(StatusCodes.OK).json({ publications });
+        const { careerId } = req.params;
+        const publications = await this.publicationModel
+            .find({ career: careerId })
+            .populate({
+                path: 'author',
+                select: 'username',
+                populate: {
+                    path: 'profile',
+                    select: 'profilePicture'
+                }
+            })
+            .exec();
+        res.status(StatusCodes.OK).json({ publications });
     } catch (error) {
-      res
-        .status(StatusCodes.INTERNAL_SERVER_ERROR)
-        .json({ message: 'Error al listar las publicaciones', error });
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones', error });
     }
-  }
+}
 
 }
 

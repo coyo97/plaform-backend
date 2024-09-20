@@ -56,41 +56,42 @@ export class ProfileController {
 		}
 	}
 
-	private async updateProfile(req: AuthRequest, res: Response): Promise<void> {
-		try {
-			const userId = req.userId;
+private async updateProfile(req: AuthRequest, res: Response): Promise<void> {
+    try {
+        const userId = req.userId;
 
-			if (!userId) {
-				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-				return;
-			}
+        if (!userId) {
+            res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+            return;
+        }
 
-			const { bio, interests } = req.body;
-			const profilePicture = req.file?.path; // Ruta de la foto de perfil
+        const { bio, interests } = req.body;
+        const profilePicture = req.file?.filename; // Nombre del archivo subido
 
-			let profile = await this.profileModel.findOne({ user: userId }).exec();
+        let profile = await this.profileModel.findOne({ user: userId }).exec();
 
-			// Si el perfil no existe, créalo
-			if (!profile) {
-				profile = new this.profileModel({ user: userId });
-			}
+        // Si el perfil no existe, créalo
+        if (!profile) {
+            profile = new this.profileModel({ user: userId });
+        }
 
-			// Actualiza el perfil con la nueva información
-			profile.bio = bio;
-			profile.interests = interests;
-			if (profilePicture) {
-				profile.profilePicture = profilePicture; // Guarda la ruta del archivo subido
-			}
-			profile.updated_at = new Date();
+        // Actualiza el perfil con la nueva información
+        profile.bio = bio;
+        profile.interests = interests;
+        if (profilePicture) {
+            profile.profilePicture = `uploads/${profilePicture}`; // Guarda la ruta relativa
+        }
+        profile.updated_at = new Date();
 
-			await profile.save();
+        await profile.save();
 
-			res.status(StatusCodes.OK).json({ profile });
-		} catch (error) {
-			console.error('Error al actualizar el perfil:', error);
-			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al actualizar el perfil', error });
-		}
-	}
+        res.status(StatusCodes.OK).json({ profile });
+    } catch (error) {
+        console.error('Error al actualizar el perfil:', error);
+        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al actualizar el perfil', error });
+    }
+}
+
 
 
 	// Método para obtener el perfil de un autor específico

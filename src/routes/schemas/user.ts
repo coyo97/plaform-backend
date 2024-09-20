@@ -19,6 +19,16 @@ const userSchema: Schema<IUser> = new Schema({
     careers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Career' }], // Campo para carreras
 });
 
+userSchema.virtual('profile', {
+    ref: 'Profile',
+    localField: '_id',
+    foreignField: 'user',
+    justOne: true,
+});
+
+userSchema.set('toObject', { virtuals: true });
+userSchema.set('toJSON', { virtuals: true });
+
 export const UserModel = (mongoose: Mongoose) => {
     return mongoose.model<IUser>("User", userSchema);
 };

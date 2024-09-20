@@ -48,43 +48,43 @@ export class UserController {
 		});
 
 		// Ruta para registrar un nuevo usuario
-// Ruta para registrar un nuevo usuario con carreras
-this.express.post(this.route, async (req, res) => {
-    const { username, email, password, careers } = req.body; // Agrega careers al cuerpo de la solicitud
-    const saltRounds = 10;
+		// Ruta para registrar un nuevo usuario con carreras
+		this.express.post(this.route, async (req, res) => {
+			const { username, email, password, careers } = req.body; // Agrega careers al cuerpo de la solicitud
+			const saltRounds = 10;
 
-    try {
-        // Hashear la contraseña antes de guardar
-        const hashedPassword = await bcrypt.hash(password, saltRounds);
+			try {
+				// Hashear la contraseña antes de guardar
+				const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-        // Verificar y asignar el rol de usuario básico si no existe un rol específico
-        let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'admi' }).exec();
+				// Verificar y asignar el rol de usuario básico si no existe un rol específico
+				let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'admi' }).exec();
 
-        if (!role) {
-            role = new (RoleModel(this.app.getClientMongoose()))({
-                name: 'admi',
-                description: 'Usuario básico',
-                permissions: [{ name: 'basic_access', description: 'Acceso básico' }],
-            });
-            await role.save();
-        }
+				if (!role) {
+					role = new (RoleModel(this.app.getClientMongoose()))({
+						name: 'admi',
+						description: 'Usuario básico',
+						permissions: [{ name: 'basic_access', description: 'Acceso básico' }],
+					});
+					await role.save();
+				}
 
-        // Asignar carreras seleccionadas y el rol encontrado o creado al usuario
-        const requestObject = { username, email, password: hashedPassword, roles: [role._id], careers };
-        const newUser = new this.user(requestObject);
-        const result = await newUser.save();
+				// Asignar carreras seleccionadas y el rol encontrado o creado al usuario
+				const requestObject = { username, email, password: hashedPassword, roles: [role._id], careers };
+				const newUser = new this.user(requestObject);
+				const result = await newUser.save();
 
-        if (result) {
-            res.status(StatusCodes.CREATED).json({ msg: "User created", user: result });
-            return;
-        }
+				if (result) {
+					res.status(StatusCodes.CREATED).json({ msg: "User created", user: result });
+					return;
+				}
 
-        res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
-    } catch (error) {
-        console.error('Error creating user:', error);
-        res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
-    }
-});
+				res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
+			} catch (error) {
+				console.error('Error creating user:', error);
+				res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
+			}
+		});
 
 		// Ruta para actualizar un usuario
 		this.express.put(`${this.route}/:id`, async (req, res) => {
@@ -110,6 +110,7 @@ this.express.post(this.route, async (req, res) => {
 		});
 
 
+		this.app.getAppServer().get(`${this.route}/me`, authMiddleware, this.getMe.bind(this));
 		// Inicializar la ruta de login
 		this.initLoginRoute();
 	}
@@ -141,5 +142,23 @@ this.express.post(this.route, async (req, res) => {
 			}
 		});
 	}
+	private async getMe(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const userId = req.userId; // Ahora `userId` debe estar disponible en `req`
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'No user ID found in request' });
+			}
+
+			const user = await this.user.findById(userId); // Utilizar `this.user`
+			if (!user) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+			}
+			return res.status(StatusCodes.OK).json({ user });
+		} catch (error) {
+			console.error('Error obteniendo usuario:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener el usuario' });
+		}
+	}
+
 }
 
