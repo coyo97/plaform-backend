@@ -8,6 +8,7 @@ import { upload } from '../middlware/upload';
 import { UserModel } from './schemas/user';
 
 import mongoose, { Schema, Document } from 'mongoose'; // Asegúrate de que mongoose está importado
+import { analyzeImage } from '../moderation/images/nudenetService';
 
 interface AuthRequest extends Request {
 	userId?: string;
@@ -117,76 +118,89 @@ private async listPublications(req: Request, res: Response): Promise<void> {
 	// Método para actualizar una publicación existente
 
 	// Método para crear una nueva publicación
-	private async createPublication(req: AuthRequest, res: Response): Promise<Response> {
-		try {
-			const { title, content, tags, careerId } = req.body;
-			const userId = req.userId;
-			const file = req.file;
+private async createPublication(req: AuthRequest, res: Response): Promise<Response> {
+	try {
+		const { title, content, tags, careerId } = req.body;
+		const userId = req.userId;
+		const file = req.file;
 
-			if (!userId) {
-				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-			}
-
-			if (!title || !content) {
-				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El título y contenido son obligatorios' });
-			}
-
-			// Verificar que la carrera seleccionada pertenece al usuario
-			const user = await UserModel(this.app.getClientMongoose()).findById(userId).exec();
-			if (!user) {
-				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no encontrado' });
-			}
-
-			// Asegurarse de que careers es un array de ObjectId
-			const careers = user.careers as mongoose.Types.ObjectId[];
-
-			let careerToUse;
-			if (careerId) {
-				// Verificar que el usuario tiene esta carrera
-				if (Array.isArray(careers) && careers.some((id) => id.toString() === careerId)) {
-					careerToUse = careerId;
-				} else {
-					return res.status(StatusCodes.BAD_REQUEST).json({ message: 'La carrera seleccionada no pertenece al usuario' });
-				}
-			} else {
-				// Si no se proporciona una carrera, usar la primera del usuario
-				if (careers.length > 0) {
-					careerToUse = careers[0];
-				} else {
-					return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El usuario no tiene carreras asociadas' });
-				}
-			}
-
-			const newPublication = new this.publicationModel({
-				title,
-				content,
-				author: userId,
-				tags: JSON.parse(tags),
-				filePath: file?.path,
-				fileType: file?.mimetype,
-				career: careerToUse,
-			});
-			const result = await newPublication.save();
-
-			return res.status(StatusCodes.CREATED).json({ publication: result });
-		} catch (error) {
-			console.error('Error al crear la publicación:', error);
-			return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Error al crear la publicación', error });
+		if (!userId) {
+			return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
 		}
+
+		if (!title || !content) {
+			return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El título y contenido son obligatorios' });
+		}
+
+		// Verificar que la carrera seleccionada pertenece al usuario
+		const user = await UserModel(this.app.getClientMongoose()).findById(userId).exec();
+		if (!user) {
+			return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no encontrado' });
+		}
+
+		if (file) {
+			try {
+				const isNSFW = await analyzeImage(file.path);
+				if (isNSFW) {
+					return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Contenido inapropiado detectado en la imagen' });
+				}
+			} catch (error) {
+				console.error('Error analizando la imagen:', error);
+				return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al analizar la imagen' });
+			}
+		}
+
+
+		// Asegurarse de que careers es un array de ObjectId
+		const careers = user.careers as mongoose.Types.ObjectId[];
+
+		let careerToUse;
+		if (careerId) {
+			// Verificar que el usuario tiene esta carrera
+			if (Array.isArray(careers) && careers.some((id) => id.toString() === careerId)) {
+				careerToUse = careerId;
+			} else {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'La carrera seleccionada no pertenece al usuario' });
+			}
+		} else {
+			// Si no se proporciona una carrera, usar la primera del usuario
+			if (careers.length > 0) {
+				careerToUse = careers[0];
+			} else {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El usuario no tiene carreras asociadas' });
+			}
+		}
+
+		const newPublication = new this.publicationModel({
+			title,
+			content,
+			author: userId,
+			tags: JSON.parse(tags),
+			filePath: file?.path,
+			fileType: file?.mimetype,
+			career: careerToUse,
+		});
+		const result = await newPublication.save();
+
+		return res.status(StatusCodes.CREATED).json({ publication: result });
+	} catch (error) {
+		console.error('Error al crear la publicación:', error);
+		return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Error al crear la publicación', error });
 	}
+}
 
 
-	private async updatePublication(req: Request, res: Response): Promise<void> {
-		try {
-			const { id } = req.params;
-			const { title, content, tags } = req.body;
-			const updatedPublication = await this.publicationModel.findByIdAndUpdate(
-				id,
-				{ title, content, tags },
-				{ new: true }
-			).exec();
-			res.status(StatusCodes.OK).json({ publication: updatedPublication });
-		} catch (error) {
+private async updatePublication(req: Request, res: Response): Promise<void> {
+	try {
+		const { id } = req.params;
+		const { title, content, tags } = req.body;
+		const updatedPublication = await this.publicationModel.findByIdAndUpdate(
+			id,
+			{ title, content, tags },
+			{ new: true }
+		).exec();
+		res.status(StatusCodes.OK).json({ publication: updatedPublication });
+	} catch (error) {
 			res.status(StatusCodes.BAD_REQUEST).json({ message: 'Error al actualizar la publicación', error });
 		}
 	}

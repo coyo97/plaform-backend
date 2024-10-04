@@ -5,6 +5,10 @@ import { CommentModel } from './schemas/comment';
 import App from '../app';
 import { authMiddleware } from '../middlware/authMiddlewares';
 
+import { analyzeComment } from '../moderation/text/toxicityService';
+import { translateText } from '../moderation/text/translationService';
+
+
 interface AuthRequest extends Request {
     userId?: string;
 }
@@ -62,29 +66,59 @@ export class CommentController {
         }
     }
 
-    private async createComment(req: AuthRequest, res: Response): Promise<Response> {
-        try {
-            const { publicationId } = req.params;
-            const { content } = req.body;
-            const userId = req.userId;
 
-            if (!userId) {
-                return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User not authenticated' });
-            }
+private async createComment(req: AuthRequest, res: Response): Promise<Response> {
+  try {
+    const { publicationId } = req.params;
+	const { content, language = 'es' } = req.body;  // Si no se proporciona, asume 'es' por defecto
 
-            const newComment = new this.commentModel({
-                content,
-                author: userId,
-                publication: publicationId,
-            });
+    const userId = req.userId;
 
-            const savedComment = await newComment.save();
-            return res.status(StatusCodes.CREATED).json({ comment: savedComment });
-        } catch (error) {
-            console.error('Error creating comment:', error);
-            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error creating comment', error });
-        }
+    console.log('Contenido original:', content);
+    console.log('Idioma proporcionado:', language);
+
+    if (!userId) {
+      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User not authenticated' });
     }
+
+    let translatedContent = content;
+
+    if (language && language !== 'en') {
+      try {
+        translatedContent = await translateText(content, 'en');
+        console.log('Contenido traducido:', translatedContent);
+      } catch (error) {
+        console.error('Error en la traducción:', error);
+        // Puedes decidir si continuar con el contenido original o rechazar el comentario
+        // return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error translating comment' });
+      }
+    } else {
+      console.log('No se requiere traducción');
+    }
+
+    // Analizar si el comentario es inapropiado
+    const isInappropriate = await analyzeComment(translatedContent);
+    console.log(`Resultado del análisis: ${isInappropriate}`);
+
+    if (isInappropriate) {
+      return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Inappropriate comment detected' });
+    }
+
+    // Guardar el comentario si es apropiado
+    const newComment = new this.commentModel({
+      content,
+      author: userId,
+      publication: publicationId,
+    });
+
+    const savedComment = await newComment.save();
+    return res.status(StatusCodes.CREATED).json({ comment: savedComment });
+  } catch (error) {
+    console.error('Error creating comment:', error);
+    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error creating comment', error });
+  }
+}
+
 
 	// Método para editar un comentario
 private async editComment(req: AuthRequest, res: Response): Promise<Response> {
