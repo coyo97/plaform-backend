@@ -90,3 +90,4 @@ this.io.use((socket: AuthenticatedSocket, next) => {
 }
 
 export default SocketController;
+

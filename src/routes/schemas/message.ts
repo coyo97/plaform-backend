@@ -3,26 +3,30 @@ import mongoose, { Schema, Document, Mongoose } from 'mongoose';
 import { IUser } from './user';
 
 export interface IMessage extends Document {
-  sender: IUser['_id']; // Referencia al usuario que envió el mensaje
-  receiver: IUser['_id']; // Referencia al usuario que recibe el mensaje
-  content: string; // Contenido del mensaje
-  createdAt: Date; // Fecha y hora de creación del mensaje
-  isGroupMessage: boolean; // Indica si el mensaje es para un grupo
-  groupId?: string; // ID del grupo (opcional, solo si el mensaje es para un grupo)
-  isRead: boolean; // Nuevo campo para indicar si el mensaje ha sido leído
+	sender: IUser['_id'];
+	receiver: IUser['_id'];
+	content: string;
+	createdAt: Date;
+	isGroupMessage: boolean;
+	groupId?: string;
+	isRead: boolean;
+	filePath?: string; // Agregar este campo
+	fileType?: string; // Agregar este campo
 }
 
 const messageSchema: Schema<IMessage> = new Schema({
-  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, // Opcional si es un mensaje grupal
-  content: { type: String, required: true },
-  createdAt: { type: Date, default: Date.now },
-  isGroupMessage: { type: Boolean, default: false },
-  groupId: { type: String }, // Opcional: solo para mensajes grupales
-  isRead: { type: Boolean, default: false }, // Campo de visto
+	sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+	receiver: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+	content: { type: String },
+	createdAt: { type: Date, default: Date.now },
+	isGroupMessage: { type: Boolean, default: false },
+	groupId: { type: String },
+	isRead: { type: Boolean, default: false },
+	filePath: { type: String }, // Campo para la ruta del archivo
+	fileType: { type: String }, // Campo para el tipo MIME del archivo
 });
 
 export const MessageModel = (mongoose: Mongoose) => {
-  return mongoose.model<IMessage>('Message', messageSchema);
+	return mongoose.model<IMessage>('Message', messageSchema);
 };
 

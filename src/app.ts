@@ -86,20 +86,14 @@ export default class App {
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;
 			console.log('connection', connectionString);
-			const connected = await mongoose.connect(connectionString);
-		if(connected) {
+		try {
+			await mongoose.connect(connectionString);
 			console.log('Database connected successfully');
+		} catch (error) {
+			console.error('Error connecting to database:', error);
 		}
-		this.databaseClient.connect(connectionString);
-
-		this.databaseClient.connection.on("error", (error) => {
-			console.log(error);
-		});
-
-		this.databaseClient.connection.once("open", () => {
-			console.log("Connected to database");
-		});
 	}
+
 	public getAppServer(): Express {
 		return this.appServer;
 	}

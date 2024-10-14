@@ -38,9 +38,16 @@ export class UserController {
 		console.log(`User Controller initialized at ${this.route}`);
 
 		// Ruta para obtener la lista de usuarios
+		// Ruta para obtener la lista de usuarios con la imagen de perfil
 		this.express.get(this.route, async (req, res) => {
 			try {
-				const list = await this.user.find().populate('roles');
+				const list = await this.user.find()
+				.select('username email') // Selecciona los campos que necesitas
+				.populate({
+					path: 'profile',
+					select: 'profilePicture',
+				})
+				.populate('roles');
 				res.status(StatusCodes.ACCEPTED).json({ list });
 			} catch (error) {
 				res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
