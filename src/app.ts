@@ -18,6 +18,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import MessageController from "./routes/message";
 import GroupController from "./routes/group";
 import StreamController from "./routes/stream";
+import { NotificationController } from "./routes/notifications";
 
 if (process.env.NODE_ENV !== "production") {
 	dotenv.config();
@@ -38,6 +39,8 @@ export default class App {
 	private io: SocketIOServer;      // Servidor Socket.IO
 	private useCors: boolean = parseEnvBoolean('USE_CORS' || '');
 
+	private socketController: SocketController;
+
 	constructor() {
 		this.databaseClient = mongoose;
 		this.appServer = express();
@@ -50,6 +53,7 @@ export default class App {
 				methods: ['GET', 'POST'],
 			},
 		});
+		this.socketController = new SocketController(this.io);
 
 		this.setupServer();
 	}
@@ -76,12 +80,13 @@ export default class App {
 		new PublicationController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new ProfileController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 
-		new CommentController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new CommentController(this, `/${this.apiVersion}/${this.apiPrefix}`, this.io);
 		new CareerController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 
 		new MessageController(this, `/${this.apiVersion}/${this.apiPrefix}`, this.io);
 		new GroupController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new StreamController(this.io, this, `/${this.apiVersion}/${this.apiPrefix}`);
+		const notificationController = new NotificationController(this, `/${this.apiVersion}/${this.apiPrefix}`,this.io, this.socketController);
 	}
 	private async setupDatabase() {
 		const connectionString = `mongodb://${this.databaseUser}:${this.databasePassword}@${this.databaseHost}:${this.databasePort}/${this.databaseName}`;

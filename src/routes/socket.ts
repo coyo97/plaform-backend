@@ -21,21 +21,21 @@ export class SocketController {
 
 	private initializeSocketEvents(): void {
 		// Middleware de autenticación de Socket.IO
-this.io.use((socket: AuthenticatedSocket, next) => {
-    const token = socket.handshake.auth.token;
-    if (!token) {
-      console.error('Token no proporcionado en la conexión de Socket.IO');
-      return next(new Error('Authentication error'));
-    }
-    try {
-      const payload = verifyToken(token);
-      socket.data.userId = payload.userId; // Almacenar userId en el socket
-      next();
-    } catch (error) {
-      console.error('Token inválido en la conexión de Socket.IO:', error);
-      next(new Error('Invalid token'));
-    }
-  });
+		this.io.use((socket: AuthenticatedSocket, next) => {
+			const token = socket.handshake.auth.token;
+			if (!token) {
+				console.error('Token no proporcionado en la conexión de Socket.IO');
+				return next(new Error('Authentication error'));
+			}
+			try {
+				const payload = verifyToken(token);
+				socket.data.userId = payload.userId; // Almacenar userId en el socket
+				next();
+			} catch (error) {
+				console.error('Token inválido en la conexión de Socket.IO:', error);
+				next(new Error('Invalid token'));
+			}
+		});
 
 		// Manejo de eventos de conexión
 		this.io.on('connection', (socket: AuthenticatedSocket) => {
@@ -87,6 +87,10 @@ this.io.use((socket: AuthenticatedSocket, next) => {
 			});
 		});
 	}
+	 // Método para obtener el socketId de un usuario
+  public getSocketId(userId: string): string | undefined {
+    return this.connectedUsers.get(userId);
+  }
 }
 
 export default SocketController;

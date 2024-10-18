@@ -8,6 +8,9 @@ import { authMiddleware } from '../middlware/authMiddlewares';
 import { analyzeComment } from '../moderation/text/toxicityService';
 import { translateText } from '../moderation/text/translationService';
 
+import { NotificationModel } from './schemas/notification';
+import { Server as SocketIOServer } from 'socket.io';
+import { PublicationModel } from './schemas/publication';
 
 interface AuthRequest extends Request {
     userId?: string;
@@ -17,11 +20,13 @@ export class CommentController {
     private route: string;
     private app: App;
     private commentModel: ReturnType<typeof CommentModel>;
+	private io: SocketIOServer;
 
-    constructor(app: App, route: string) {
+    constructor(app: App, route: string, io: SocketIOServer) {
         this.route = route;
         this.app = app;
         this.commentModel = CommentModel(this.app.getClientMongoose());
+		this.io = io;
         this.initRoutes();
     }
 
@@ -67,57 +72,100 @@ export class CommentController {
     }
 
 
-private async createComment(req: AuthRequest, res: Response): Promise<Response> {
-  try {
-    const { publicationId } = req.params;
-	const { content, language = 'es' } = req.body;  // Si no se proporciona, asume 'es' por defecto
+	private async createComment(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { publicationId } = req.params;
+			const { content, language = 'es' } = req.body;  // Si no se proporciona, asume 'es' por defecto
 
-    const userId = req.userId;
+			const userId = req.userId;
 
-    console.log('Contenido original:', content);
-    console.log('Idioma proporcionado:', language);
+			console.log('Contenido original:', content);
+			console.log('Idioma proporcionado:', language);
 
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User not authenticated' });
-    }
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'User not authenticated' });
+			}
 
-    let translatedContent = content;
+			let translatedContent = content;
 
-    if (language && language !== 'en') {
-      try {
-        translatedContent = await translateText(content, 'en');
-        console.log('Contenido traducido:', translatedContent);
-      } catch (error) {
-        console.error('Error en la traducción:', error);
-        // Puedes decidir si continuar con el contenido original o rechazar el comentario
-        // return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error translating comment' });
-      }
-    } else {
-      console.log('No se requiere traducción');
-    }
+			if (language && language !== 'en') {
+				try {
+					translatedContent = await translateText(content, 'en');
+					console.log('Contenido traducido:', translatedContent);
+				} catch (error) {
+					console.error('Error en la traducción:', error);
+					// Puedes decidir si continuar con el contenido original o rechazar el comentario
+					// return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error translating comment' });
+				}
+			} else {
+				console.log('No se requiere traducción');
+			}
 
-    // Analizar si el comentario es inapropiado
-    const isInappropriate = await analyzeComment(translatedContent);
-    console.log(`Resultado del análisis: ${isInappropriate}`);
+			// Analizar si el comentario es inapropiado
+			const isInappropriate = await analyzeComment(translatedContent);
+			console.log(`Resultado del análisis: ${isInappropriate}`);
 
-    if (isInappropriate) {
-      return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Inappropriate comment detected' });
-    }
+			if (isInappropriate) {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Inappropriate comment detected' });
+			}
 
-    // Guardar el comentario si es apropiado
-    const newComment = new this.commentModel({
-      content,
-      author: userId,
-      publication: publicationId,
-    });
+			// Guardar el comentario si es apropiado
+			const newComment = new this.commentModel({
+				content,
+				author: userId,
+				publication: publicationId,
+			});
 
-    const savedComment = await newComment.save();
-    return res.status(StatusCodes.CREATED).json({ comment: savedComment });
-  } catch (error) {
-    console.error('Error creating comment:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error creating comment', error });
-  }
-}
+			const savedComment = await newComment.save();
+
+			// Popula el comentario para obtener detalles del autor
+      const populatedComment = await savedComment.populate('author', 'username');
+
+
+			// Obtener la publicación para obtener el autor
+			const publication = await PublicationModel(this.app.getClientMongoose())
+			.findById(publicationId)
+			.populate('author') // Popula el autor para obtener su información
+			.exec();
+
+			if (publication) {
+				// Crear una nueva notificación
+				const notification = new (NotificationModel(this.app.getClientMongoose()))({
+					recipient: publication.author._id,
+					sender: userId,
+					type: 'comment',
+					message: 'Ha comentado tu publicación',
+				});
+				await notification.save();
+
+				// **Emitir notificación en tiempo real**
+				// Encuentra el socket del autor de la publicación
+				const recipientSocket = Array.from(this.io.sockets.sockets.values()).find(
+					(socket) => socket.data.userId === publication.author._id.toString()
+				);
+
+				if (recipientSocket) {
+					recipientSocket.emit('new-notification', {
+						message: `El usuario ${userId} ha comentado tu publicación`,
+						type: 'comment',
+						data: {
+							publicationId,
+							comment: populatedComment
+						},
+					});
+				} else {
+					console.log(`El autor de la publicación ${publication.author._id} no está conectado.`);
+				}
+			}
+			// Emitir el evento de nuevo comentario a la sala de la publicación
+      this.io.to(publicationId).emit('new-comment', populatedComment);
+
+			return res.status(StatusCodes.CREATED).json({ comment: savedComment });
+		} catch (error) {
+			console.error('Error creating comment:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error creating comment', error });
+		}
+	}
 
 
 	// Método para editar un comentario
