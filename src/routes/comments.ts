@@ -120,7 +120,7 @@ export class CommentController {
 			const isInappropriate = await analyzeComment(translatedContent);
 
 			if (isInappropriate) {
-				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Inappropriate comment detected' });
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Comentario inapropiado. Por favor, evita lenguaje ofensivo.' });
 			}
 
 			// Guardar el comentario si es apropiado

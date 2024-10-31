@@ -132,33 +132,33 @@ export class PublicationController {
 			authMiddleware,
 			this.updateModerationStatus.bind(this)
 		);
-// Ruta para reportar una publicación
-this.app.getAppServer().post(
-  `${this.route}/publications/:publicationId/report`,
-  authMiddleware,
-  this.reportPublication.bind(this)
-);
+		// Ruta para reportar una publicación
+		this.app.getAppServer().post(
+			`${this.route}/publications/:publicationId/report`,
+			authMiddleware,
+			this.reportPublication.bind(this)
+		);
 
-// Ruta para dar like a una publicación
-this.app.getAppServer().post(
-  `${this.route}/publications/:publicationId/like`,
-  authMiddleware,
-  this.likePublication.bind(this)
-);
+		// Ruta para dar like a una publicación
+		this.app.getAppServer().post(
+			`${this.route}/publications/:publicationId/like`,
+			authMiddleware,
+			this.likePublication.bind(this)
+		);
 
-// Ruta para quitar el like a una publicación
-this.app.getAppServer().post(
-  `${this.route}/publications/:publicationId/unlike`,
-  authMiddleware,
-  this.unlikePublication.bind(this)
-);
+		// Ruta para quitar el like a una publicación
+		this.app.getAppServer().post(
+			`${this.route}/publications/:publicationId/unlike`,
+			authMiddleware,
+			this.unlikePublication.bind(this)
+		);
 
-// Ruta para buscar publicaciones
-this.app.getAppServer().get(
-  `${this.route}/publications/search`,
-  authMiddleware,
-  this.searchPublications.bind(this)
-);
+		// Ruta para buscar publicaciones
+		this.app.getAppServer().get(
+			`${this.route}/publications/search`,
+			authMiddleware,
+			this.searchPublications.bind(this)
+		);
 
 	}
 
@@ -181,10 +181,6 @@ this.app.getAppServer().get(
 		}
 	}
 
-	// Método para crear una nueva publicación
-	// Método para actualizar una publicación existente
-
-	// Método para crear una nueva publicación
 	// Método para crear una nueva publicación
 	private async createPublication(req: AuthRequest, res: Response): Promise<Response> {
 		try {
@@ -432,143 +428,143 @@ this.app.getAppServer().get(
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al actualizar el estado del moderador de IA', error });
 		}
 	}
-private async reportPublication(req: AuthRequest, res: Response): Promise<Response> {
-  try {
-    const { publicationId } = req.params;
-    const { reason } = req.body;
-    const userId = req.userId;
+	private async reportPublication(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { publicationId } = req.params;
+			const { reason } = req.body;
+			const userId = req.userId;
 
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-    }
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+			}
 
-    if (!reason) {
-      return res.status(StatusCodes.BAD_REQUEST).json({ message: 'La razón del reporte es obligatoria' });
-    }
+			if (!reason) {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'La razón del reporte es obligatoria' });
+			}
 
-    // Verificar si la publicación existe
-    const publication = await this.publicationModel.findById(publicationId).exec();
-    if (!publication) {
-      return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
-    }
+			// Verificar si la publicación existe
+			const publication = await this.publicationModel.findById(publicationId).exec();
+			if (!publication) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
+			}
 
-    // Crear un nuevo reporte
-    const Report = ReportModel(this.app.getClientMongoose());
-    const newReport = new Report({
-      reporter: userId,
-      publication: publicationId,
-      reason,
-      status: 'pending',
-    });
+			// Crear un nuevo reporte
+			const Report = ReportModel(this.app.getClientMongoose());
+			const newReport = new Report({
+				reporter: userId,
+				publication: publicationId,
+				reason,
+				status: 'pending',
+			});
 
-    await newReport.save();
+			await newReport.save();
 
-    return res.status(StatusCodes.CREATED).json({ message: 'Reporte enviado correctamente' });
-  } catch (error) {
-    console.error('Error al reportar la publicación:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al reportar la publicación', error });
-  }
-}
-// Método para dar like a una publicación
-private async likePublication(req: AuthRequest, res: Response): Promise<Response> {
-  try {
-    const { publicationId } = req.params;
-    const userId = req.userId;
+			return res.status(StatusCodes.CREATED).json({ message: 'Reporte enviado correctamente' });
+		} catch (error) {
+			console.error('Error al reportar la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al reportar la publicación', error });
+		}
+	}
+	// Método para dar like a una publicación
+	private async likePublication(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { publicationId } = req.params;
+			const userId = req.userId;
 
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-    }
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+			}
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+			const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Intentar agregar el userId al array de likes usando $addToSet
-    const publication = await this.publicationModel.findByIdAndUpdate(
-      publicationId,
-      { $addToSet: { likes: userObjectId } },
-      { new: true }
-    ).exec();
+			// Intentar agregar el userId al array de likes usando $addToSet
+			const publication = await this.publicationModel.findByIdAndUpdate(
+				publicationId,
+				{ $addToSet: { likes: userObjectId } },
+				{ new: true }
+			).exec();
 
-    if (!publication) {
-      return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
-    }
+			if (!publication) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
+			}
 
-    return res.status(StatusCodes.OK).json({
-      message: 'Has dado like a la publicación',
-      likesCount: publication.likes.length,
-    });
-  } catch (error) {
-    console.error('Error al dar like a la publicación:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      message: 'Error al dar like a la publicación',
-      error,
-    });
-  }
-}
+			return res.status(StatusCodes.OK).json({
+				message: 'Has dado like a la publicación',
+				likesCount: publication.likes.length,
+			});
+		} catch (error) {
+			console.error('Error al dar like a la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+				message: 'Error al dar like a la publicación',
+				error,
+			});
+		}
+	}
 
-private async unlikePublication(req: AuthRequest, res: Response): Promise<Response> {
-  try {
-    const { publicationId } = req.params;
-    const userId = req.userId;
+	private async unlikePublication(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { publicationId } = req.params;
+			const userId = req.userId;
 
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-    }
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+			}
 
-    const userObjectId = new mongoose.Types.ObjectId(userId);
+			const userObjectId = new mongoose.Types.ObjectId(userId);
 
-    // Intentar eliminar el userId del array de likes usando $pull
-    const publication = await this.publicationModel.findByIdAndUpdate(
-      publicationId,
-      { $pull: { likes: userObjectId } },
-      { new: true }
-    ).exec();
+			// Intentar eliminar el userId del array de likes usando $pull
+			const publication = await this.publicationModel.findByIdAndUpdate(
+				publicationId,
+				{ $pull: { likes: userObjectId } },
+				{ new: true }
+			).exec();
 
-    if (!publication) {
-      return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
-    }
+			if (!publication) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
+			}
 
-    return res.status(StatusCodes.OK).json({
-      message: 'Has quitado el like a la publicación',
-      likesCount: publication.likes.length,
-    });
-  } catch (error) {
-    console.error('Error al quitar el like a la publicación:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
-      message: 'Error al quitar el like a la publicación',
-      error,
-    });
-  }
-}
-private async searchPublications(req: Request, res: Response): Promise<Response> {
-  try {
-    const { query } = req.query; // Obtenemos el parámetro 'query' de la solicitud
+			return res.status(StatusCodes.OK).json({
+				message: 'Has quitado el like a la publicación',
+				likesCount: publication.likes.length,
+			});
+		} catch (error) {
+			console.error('Error al quitar el like a la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+				message: 'Error al quitar el like a la publicación',
+				error,
+			});
+		}
+	}
+	private async searchPublications(req: Request, res: Response): Promise<Response> {
+		try {
+			const { query } = req.query; // Obtenemos el parámetro 'query' de la solicitud
 
-    if (!query || typeof query !== 'string') {
-      return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El parámetro de búsqueda es obligatorio' });
-    }
+			if (!query || typeof query !== 'string') {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El parámetro de búsqueda es obligatorio' });
+			}
 
-    // Realizar la búsqueda utilizando el índice de texto
-    const publications = await this.publicationModel.find(
-      { $text: { $search: query } },
-      { score: { $meta: 'textScore' } }
-    )
-    .sort({ score: { $meta: 'textScore' } })
-    .populate({
-      path: 'author',
-      select: 'username',
-      populate: {
-        path: 'profile',
-        select: 'profilePicture'
-      }
-    })
-    .exec();
+			// Realizar la búsqueda utilizando el índice de texto
+			const publications = await this.publicationModel.find(
+				{ $text: { $search: query } },
+				{ score: { $meta: 'textScore' } }
+			)
+			.sort({ score: { $meta: 'textScore' } })
+			.populate({
+				path: 'author',
+				select: 'username',
+				populate: {
+					path: 'profile',
+					select: 'profilePicture'
+				}
+			})
+			.exec();
 
-    return res.status(StatusCodes.OK).json({ publications });
-  } catch (error) {
-    console.error('Error al buscar publicaciones:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al buscar publicaciones', error });
-  }
-}
+			return res.status(StatusCodes.OK).json({ publications });
+		} catch (error) {
+			console.error('Error al buscar publicaciones:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al buscar publicaciones', error });
+		}
+	}
 
 }
 

@@ -221,28 +221,30 @@ export class SocketController {
 			});
 		} else {
 			// Lógica para mensajes privados
+			// Lógica para mensajes privados
 			if (!receiverId) {
-				receiverId = populatedMessage.receiver?.toString();
+				receiverId = populatedMessage.receiver?._id.toString();
 				if (!receiverId) {
 					console.error('receiverId is undefined for a private message.');
 					return;
 				}
-
-				console.log(`receiverId: ${receiverId}`);
-				const receiverSocketId = this.connectedUsers.get(receiverId);
-				if (receiverSocketId) {
-					const sender = populatedMessage.sender as IUser;
-					console.log(`Emitiendo mensaje al receptor ${receiverId} en socket ${receiverSocketId}`);
-					this.io.to(receiverSocketId).emit('receive-message', populatedMessage);
-					this.io.to(receiverSocketId).emit('new-notification', {
-						message: `Nuevo mensaje de ${sender.username}`,
-						type: 'message',
-						data: populatedMessage,
-					});
-				} else {
-					console.warn(`Usuario destino ${receiverId} no está conectado.`);
-				}
 			}
+
+			console.log(`receiverId: ${receiverId}`);
+			const receiverSocketId = this.connectedUsers.get(receiverId);
+			if (receiverSocketId) {
+				const sender = populatedMessage.sender as IUser;
+				console.log(`Emitiendo mensaje al receptor ${receiverId} en socket ${receiverSocketId}`);
+				this.io.to(receiverSocketId).emit('receive-message', populatedMessage);
+				this.io.to(receiverSocketId).emit('new-notification', {
+					message: `Nuevo mensaje de ${sender.username}`,
+					type: 'message',
+					data: populatedMessage,
+				});
+			} else {
+				console.warn(`Usuario destino ${receiverId} no está conectado.`);
+			}
+
 		}
 	}
 	// Método para obtener el socketId de un usuario
@@ -290,7 +292,43 @@ export class SocketController {
 			socket.to(streamId).emit('ice-candidate', candidate); // Emitir candidato ICE
 		});
 	}
+public async emitMessageDeletion(
+  messageId: string,
+  isGroup: boolean,
+  receiverId?: string,
+  groupId?: string
+): Promise<void> {
+  // Emitir a los usuarios correspondientes
+  if (isGroup) {
+    // Emitir a todos los miembros del grupo
+    const group = await this.groupModel.findById(groupId).populate('members');
+    if (!group) {
+      console.error('Grupo no encontrado');
+      return;
+    }
 
+    group.members.forEach((member: any) => {
+      const memberId = member._id.toString();
+      const memberSocketId = this.connectedUsers.get(memberId);
+      if (memberSocketId) {
+        this.io.to(memberSocketId).emit('message-deleted', { messageId });
+      }
+    });
+  } else {
+    // Emitir al receptor
+    if (!receiverId) {
+      console.error('receiverId is undefined for a private message deletion.');
+      return;
+    }
+
+    const receiverSocketId = this.connectedUsers.get(receiverId);
+    if (receiverSocketId) {
+      this.io.to(receiverSocketId).emit('message-deleted', { messageId });
+    } else {
+      console.warn(`Usuario destino ${receiverId} no está conectado.`);
+    }
+  }
+}
 }
 
 export default SocketController;
