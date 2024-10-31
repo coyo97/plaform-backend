@@ -1,5 +1,5 @@
 // src/routes/schemas/group.ts
-import mongoose, { Schema, Document, Mongoose } from 'mongoose';
+import mongoose, { Schema, Document, Mongoose, Types } from 'mongoose';
 import { IUser } from './user';
 
 export interface IGroup extends Document {
@@ -8,6 +8,7 @@ export interface IGroup extends Document {
   members: IUser['_id'][]; // Lista de miembros (usuarios)
   createdAt: Date; // Fecha de creación
   createdBy: IUser['_id']; // Usuario que creó el grupo
+  admins: Types.ObjectId[]; // Nuevo campo para administradores
 }
 
 const groupSchema: Schema<IGroup> = new Schema({
@@ -16,6 +17,7 @@ const groupSchema: Schema<IGroup> = new Schema({
   members: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
   createdAt: { type: Date, default: Date.now },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  admins: [{ type: Schema.Types.ObjectId, ref: 'User' }], // Agregado
 });
 
 export const GroupModel = (mongoose: Mongoose) => {

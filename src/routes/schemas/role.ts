@@ -1,33 +1,32 @@
-import mongoose, { Schema, Document, Mongoose } from 'mongoose';
+// src/routes/schemas/role.ts
+import { Schema, model, Document } from 'mongoose';
 
-// Interfaz para definir un permiso individual
-export interface IPermission {
-  name: string;      // Nombre del permiso, e.g., 'assign_roles'
-  description: string; // Descripción del permiso
-}
-
-// Interfaz para definir un rol
 export interface IRole extends Document {
-  name: string;                // Nombre del rol, e.g., 'admin'
-  description: string;         // Descripción del rol
-  permissions: IPermission[];  // Lista de permisos asociados al rol
+  name: string;
+  description?: string;
+  permissions: IPermission[];
 }
 
-// Esquema de Permiso
-const permissionSchema: Schema<IPermission> = new Schema({
-  name: { type: String, required: true, unique: true },
-  description: { type: String, required: true }
+export interface IPermission {
+  module: string;
+  action: string;
+  name: string;
+  description: string;
+}
+
+const permissionSchema = new Schema<IPermission>({
+  module: { type: String, required: true },
+  action: { type: String, required: true },
+  name: { type: String, required: true }, // Asegura que 'name' es requerido
+  description: { type: String },
 });
 
-// Esquema de Rol
-const roleSchema: Schema<IRole> = new Schema({
+
+const roleSchema = new Schema<IRole>({
   name: { type: String, required: true, unique: true },
-  description: { type: String, required: true },
-  permissions: [permissionSchema] // Relaciona los permisos al rol
+  description: { type: String },
+  permissions: [permissionSchema],
 });
 
-// Exporta el modelo de Rol
-export const RoleModel = (mongoose: Mongoose) => {
-  return mongoose.model<IRole>('Role', roleSchema);
-};
+export const RoleModel = (mongoose: typeof import('mongoose')) => mongoose.model<IRole>('Role', roleSchema);
 

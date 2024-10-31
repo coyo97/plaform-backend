@@ -3,7 +3,8 @@ import { StatusCodes } from 'http-status-codes';
 import { ProfileModel, IProfile } from './schemas/profile'; 
 import App from '../app';
 import { authMiddleware } from '../middlware/authMiddlewares';
-import { upload } from '../middlware/upload';
+import { getUploadMiddleware } from '../middlware/upload';
+import { SettingsModel } from './schemas/settings';
 
 
 import { UserModel } from './schemas/user';
@@ -30,7 +31,26 @@ export class ProfileController {
 
 	private initRoutes(): void {
 		this.app.getAppServer().get(`${this.route}/profile`, authMiddleware, this.getProfile.bind(this));
-		this.app.getAppServer().put(`${this.route}/profile`, authMiddleware, upload.single('profilePicture'), this.updateProfile.bind(this));
+		this.app.getAppServer().put(
+			`${this.route}/profile`, authMiddleware,
+    async (req, res, next) => {
+      // Obtén el maxUploadSize desde la base de datos
+      const Settings = SettingsModel(this.app.getClientMongoose());
+      const settings = await Settings.findOne().exec();
+      const maxUploadSize = settings?.maxUploadSize ?? 50 * 1024 * 1024;
+
+      // Obtén el middleware de subida con el tamaño actualizado
+      const upload = getUploadMiddleware(maxUploadSize);
+
+      // Llama al middleware de multer
+      upload.single('file')(req, res, (err) => {
+        if (err) {
+          return res.status(StatusCodes.BAD_REQUEST).json({ message: err.message });
+        }
+        next();
+      });
+    }, this.updateProfile.bind(this)
+		);
 
 		this.app.getAppServer().get(`${this.route}/authors/:id`, authMiddleware, this.getAuthorProfile.bind(this));
 	}

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { StatusCodes } from 'http-status-codes';
 import { RoleModel, IRole } from './schemas/role';
 import App from '../app';
+import { authMiddleware, adminMiddleware } from '../middlware/authMiddlewares';
+import { body, validationResult } from 'express-validator';
 
 export class RoleController {
 	private route: string;
@@ -16,10 +18,51 @@ export class RoleController {
 	}
 
 	private initRoutes(): void {
-		this.app.getAppServer().get(`${this.route}/roles`, this.listRoles.bind(this));
-		this.app.getAppServer().post(`${this.route}/roles`, this.createRole.bind(this));
-		this.app.getAppServer().put(`${this.route}/roles/:id`, this.editRole.bind(this));
-		this.app.getAppServer().delete(`${this.route}/roles/:id`, this.deleteRole.bind(this));
+		// Ruta para listar roles
+		this.app.getAppServer().get(
+			`${this.route}/roles`,
+			authMiddleware,
+			//     adminMiddleware,//solo estamos comentando eso y funcina la creacion de roles
+			this.listRoles.bind(this)
+		);
+
+		// Ruta para crear un nuevo rol
+		this.app.getAppServer().post(
+			`${this.route}/roles`,
+			authMiddleware,
+			adminMiddleware,
+			[
+				body('name').notEmpty().withMessage('El nombre es obligatorio'),
+				body('description').optional().isString(),
+				body('permissions').isArray().withMessage('Los permisos deben ser un array'),
+				body('permissions.*.module').notEmpty().withMessage('El módulo es obligatorio'),
+				body('permissions.*.action').notEmpty().withMessage('La acción es obligatoria'),
+			],
+			this.createRole.bind(this)
+		);
+
+		// Ruta para editar un rol existente
+		this.app.getAppServer().put(
+			`${this.route}/roles/:id`,
+			authMiddleware,
+			adminMiddleware,
+			[
+				body('name').notEmpty().withMessage('El nombre es obligatorio'),
+				body('description').optional().isString(),
+				body('permissions').isArray().withMessage('Los permisos deben ser un array'),
+				body('permissions.*.module').notEmpty().withMessage('El módulo es obligatorio'),
+				body('permissions.*.action').notEmpty().withMessage('La acción es obligatoria'),
+			],
+			this.editRole.bind(this)
+		);
+
+		// Ruta para eliminar un rol
+		this.app.getAppServer().delete(
+			`${this.route}/roles/:id`,
+			authMiddleware,
+			adminMiddleware,
+			this.deleteRole.bind(this)
+		);
 	}
 
 	private async listRoles(req: Request, res: Response): Promise<Response> {
@@ -33,11 +76,14 @@ export class RoleController {
 	}
 
 	private async createRole(req: Request, res: Response): Promise<Response> {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			return res.status(StatusCodes.BAD_REQUEST).json({ errors: errors.array() });
+		}
+
+		const { name, description, permissions } = req.body;
+
 		try {
-			const { name, description, permissions } = req.body;
-			if (!name || !permissions) {
-				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'El nombre y los permisos son obligatorios' });
-			}
 			const newRole = new this.roleModel({ name, description, permissions });
 			const result = await newRole.save();
 			return res.status(StatusCodes.CREATED).json({ role: result });
@@ -48,10 +94,21 @@ export class RoleController {
 	}
 
 	private async editRole(req: Request, res: Response): Promise<Response> {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			return res.status(StatusCodes.BAD_REQUEST).json({ errors: errors.array() });
+		}
+
+		const { id } = req.params;
+		const { name, description, permissions } = req.body;
+
 		try {
-			const { id } = req.params;
-			const { name, description, permissions } = req.body;
-			const role = await this.roleModel.findByIdAndUpdate(id, { name, description, permissions }, { new: true }).exec();
+			const role = await this.roleModel.findByIdAndUpdate(
+				id,
+				{ name, description, permissions },
+				{ new: true }
+			).exec();
+
 			if (!role) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Rol no encontrado' });
 			}

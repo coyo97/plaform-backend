@@ -1,10 +1,10 @@
 // src/routes/schemas/message.ts
-import mongoose, { Schema, Document, Mongoose } from 'mongoose';
+import mongoose, { Schema, Document, Mongoose, Types } from 'mongoose';
 import { IUser } from './user';
 
 export interface IMessage extends Document {
-	sender: IUser['_id'];
-	receiver: IUser['_id'];
+	sender: Types.ObjectId | IUser;
+	receiver?: Types.ObjectId | IUser | null;
 	content: string;
 	createdAt: Date;
 	isGroupMessage: boolean;

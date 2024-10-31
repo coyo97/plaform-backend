@@ -1,91 +1,86 @@
-import { Server as SocketIOServer } from 'socket.io';
-import { verifyToken } from '../authentication/authUser';
-import { StreamModel, IStream } from './schemas/stream';
 import { Model } from 'mongoose';
 import { authMiddleware } from '../middlware/authMiddlewares';
 import { Request, Response } from 'express';
 import App from '../app';
 import { StatusCodes } from 'http-status-codes';
+import { StreamModel, IStream } from './schemas/stream';
+import { v4 as uuidv4 } from 'uuid'; // Importa uuid
+
+interface AuthRequest extends Request {
+	userId?: string;
+}
 
 export class StreamController {
-    private io: SocketIOServer;
-    private route: string;
-    private app: App;
-    private streamModel: Model<IStream>;
+	private route: string;
+	private app: App;
+	private streamModel: Model<IStream>;
 
-    constructor(io: SocketIOServer, app: App, route: string) {
-        this.io = io;
-        this.route = route;
-        this.app = app;
-        this.streamModel = StreamModel;
-        this.initRoutes();
-        this.initializeSocketEvents();
-    }
+	constructor(app: App, route: string) {
+		this.route = route;
+		this.app = app;
+		this.streamModel = StreamModel;
+		this.initRoutes();
+	}
 
-    private initializeSocketEvents(): void {
-        // Middleware de autenticación de Socket.IO
-        this.io.use((socket, next) => {
-            const token = socket.handshake.auth.token;
-            if (!token) {
-                return next(new Error('Authentication error'));
-            }
-            try {
-                const payload = verifyToken(token);
-                socket.data.userId = payload.userId; // Almacenar userId en el socket
-                next();
-            } catch (error) {
-                next(new Error('Invalid token'));
-            }
-        });
+	private initRoutes(): void {
+		this.app.getAppServer().get(`${this.route}/streams`, authMiddleware, this.getStreams.bind(this));
+		this.app.getAppServer().post(`${this.route}/streams`, authMiddleware, this.createStream.bind(this));
+		this.app.getAppServer().delete(`${this.route}/streams/:streamId`, authMiddleware, this.deleteStream.bind(this));
 
-        // Manejo de eventos de conexión
-        this.io.on('connection', (socket) => {
-            const userId = socket.data.userId;
-            if (!userId) return;
+	}
 
-            console.log(`Usuario conectado: ${userId}`);
-
-            // Unirse a la sala de stream
-            socket.on('join-stream', (streamId) => {
-                socket.join(streamId); // Unir al usuario a la sala
-                console.log(`Usuario ${userId} se unió al stream ${streamId}`);
-            });
-
-            // Manejo de oferta WebRTC
-            socket.on('offer', (streamId, offer) => {
-                socket.to(streamId).emit('offer', offer); // Emitir oferta a los demás
-            });
-
-            // Manejo de respuesta WebRTC
-            socket.on('answer', (streamId, answer) => {
-                socket.to(streamId).emit('answer', answer); // Emitir respuesta a los demás
-            });
-
-            // Manejo de candidatos ICE
-            socket.on('ice-candidate', (streamId, candidate) => {
-                socket.to(streamId).emit('ice-candidate', candidate); // Emitir candidato ICE
-            });
-
-            // Desconexión
-            socket.on('disconnect', () => {
-                console.log(`Usuario desconectado: ${userId}`);
-            });
-        });
-    }
-
-    private initRoutes(): void {
-        this.app.getAppServer().get(`${this.route}/streams`, authMiddleware, this.getStreams.bind(this));
-    }
-
-    private async getStreams(req: Request, res: Response): Promise<Response> {
-        try {
-            const streams = await this.streamModel.find(); // Utilizar el modelo Stream para obtener los streams
-            return res.status(StatusCodes.OK).json({ streams });
-        } catch (error) {
-            console.error('Error obteniendo streams:', error);
-            return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener los streams' });
+	private async getStreams(req: Request, res: Response): Promise<Response> {
+		try {
+			const streams = await this.streamModel.find(); // Obtener los streams
+			return res.status(StatusCodes.OK).json({ streams });
+		} catch (error) {
+			console.error('Error obteniendo streams:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener los streams' });
+		}
+	}
+private async createStream(req: AuthRequest, res: Response): Promise<Response> {
+    try {
+        const { title } = req.body;
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
         }
+
+        // Genera un streamKey único
+        const streamKey = uuidv4();
+
+        const newStream = new this.streamModel({ title, userId, streamKey });
+        await newStream.save();
+        return res.status(StatusCodes.CREATED).json({ stream: newStream });
+    } catch (error) {
+        console.error('Error creando stream:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al crear el stream' });
     }
+}
+private async deleteStream(req: AuthRequest, res: Response): Promise<Response> {
+    try {
+        const { streamId } = req.params;
+        const userId = req.userId;
+        if (!userId) {
+            return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+        }
+        // Verificar que el usuario es el propietario del stream
+        const stream = await this.streamModel.findOneAndUpdate(
+            { _id: streamId, userId },
+            { active: false },
+            { new: true }
+        );
+        if (!stream) {
+            return res.status(StatusCodes.NOT_FOUND).json({ message: 'Stream no encontrado o no tienes permisos para eliminarlo' });
+        }
+        return res.status(StatusCodes.OK).json({ message: 'Stream detenido', stream });
+    } catch (error) {
+        console.error('Error deteniendo el stream:', error);
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al detener el stream' });
+    }
+}
+
+
 }
 
 export default StreamController;
