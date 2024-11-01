@@ -5,7 +5,7 @@ import App from '../app';
 import { authMiddleware, adminMiddleware } from '../middlware/authMiddlewares';
 //import { upload } from '../middlware/upload';
 import { getUploadMiddleware } from '../middlware/upload';
-import { UserModel } from './schemas/user';
+import { UserModel, IUser } from './schemas/user';
 import { ReportModel } from './schemas/report';
 
 import mongoose, { Schema, Document, Types } from 'mongoose'; // Asegúrate de que mongoose está importado
@@ -59,6 +59,21 @@ export class PublicationController {
 			authMiddleware, // Asegura autenticación para ver publicaciones
 			this.listPublications.bind(this)
 		);
+		//esta rutas deben ir mas antes que las rutas genericas: ej. /publications/:id.
+
+ // Ruta para listar publicaciones más gustadas
+  this.app.getAppServer().get(
+    `${this.route}/publications/most-liked`,
+    authMiddleware,
+    this.listMostLikedPublications.bind(this)
+  );
+
+  // Ruta para listar publicaciones más comentadas
+  this.app.getAppServer().get(
+    `${this.route}/publications/most-commented`,
+    authMiddleware,
+    this.listMostCommentedPublications.bind(this)
+  );
 
 		// Ruta para actualizar una publicación existente
 		this.app.getAppServer().put(
@@ -103,6 +118,12 @@ export class PublicationController {
 				});
 			},
 			this.updateUserPublication.bind(this)
+		);
+		// Ruta para obtener una publicación por ID
+		this.app.getAppServer().get(
+			`${this.route}/publications/:publicationId`,
+			authMiddleware,
+			this.getPublicationById.bind(this)
 		);
 
 		// Ruta para eliminar una publicación
@@ -159,13 +180,30 @@ export class PublicationController {
 			authMiddleware,
 			this.searchPublications.bind(this)
 		);
-
 	}
 
 	// Método para listar todas las publicaciones
-	private async listPublications(req: Request, res: Response): Promise<void> {
+	private async listPublications(req: AuthRequest, res: Response): Promise<void> {
 		try {
-			const publications = await this.publicationModel.find()
+			const userId = req.userId;
+
+			const User = UserModel(this.app.getClientMongoose());
+
+			// Usuarios que han bloqueado al usuario actual
+			const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
+			const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
+
+			// Usuarios que el usuario actual ha bloqueado
+			const me = await User.findById(userId).select('blockedUsers').exec();
+			const myBlockedUserIds = me ? me.blockedUsers : [];
+
+			// Combinar ambas listas de IDs a excluir
+			const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
+
+			// Excluir publicaciones de usuarios bloqueados y ordenar por fecha de creación
+			const publications = await this.publicationModel.find({
+				author: { $nin: excludedUserIds }
+			})
 			.populate({
 				path: 'author',
 				select: 'username',
@@ -174,12 +212,16 @@ export class PublicationController {
 					select: 'profilePicture'
 				}
 			})
+			.sort({ createdAt: -1 }) // Ordenar por fecha de creación descendente
 			.exec();
+
 			res.status(StatusCodes.OK).json({ publications });
 		} catch (error) {
+			console.error('Error al listar las publicaciones:', error);
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones', error });
 		}
 	}
+
 
 	// Método para crear una nueva publicación
 	private async createPublication(req: AuthRequest, res: Response): Promise<Response> {
@@ -307,8 +349,6 @@ export class PublicationController {
 		}
 	}
 
-	// Método para actualizar una publicación del usuario autenticado
-	// Método para editar una publicación del usuario autenticado
 	// Método para editar una publicación del usuario autenticado
 	private async updateUserPublication(req: AuthRequest, res: Response): Promise<Response> {
 		try {
@@ -346,10 +386,6 @@ export class PublicationController {
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al editar la publicación', error });
 		}
 	}
-
-
-
-
 	// Método para eliminar una publicación del usuario autenticado
 	private async deleteUserPublication(req: AuthRequest, res: Response): Promise<Response> {
 		try {
@@ -428,6 +464,24 @@ export class PublicationController {
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al actualizar el estado del moderador de IA', error });
 		}
 	}
+	private async getPublicationById(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { publicationId } = req.params;
+			const publication = await this.publicationModel
+			.findById(publicationId)
+			.populate('author')
+			.exec();
+
+			if (!publication) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
+			}
+
+			return res.status(StatusCodes.OK).json({ publication });
+		} catch (error) {
+			console.error('Error al obtener la publicación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener la publicación', error });
+		}
+	}
 	private async reportPublication(req: AuthRequest, res: Response): Promise<Response> {
 		try {
 			const { publicationId } = req.params;
@@ -459,11 +513,64 @@ export class PublicationController {
 
 			await newReport.save();
 
+			// Actualizar el contador y el listado de usuarios únicos en el autor de la publicación
+			const authorId = publication.author as Types.ObjectId; // Aseguramos que es un ObjectId
+			const userModel = UserModel(this.app.getClientMongoose());
+			const user = await userModel.findById(authorId);
+
+			if (user) {
+				const userIdObject = new mongoose.Types.ObjectId(userId);
+
+				// Verificar si el usuario ya ha reportado anteriormente
+				const hasReported = user.uniqueReporters.some((reporterId) => reporterId.equals(userIdObject));
+
+				if (!hasReported) {
+					user.uniqueReporters.push(userIdObject);
+					user.reportCount += 1;
+
+					await user.save();
+
+					// Lógica para evaluar si el usuario debe ser bloqueado o eliminado
+					await this.checkAndUpdateUserStatus(user);
+				}
+			} else {
+				console.error('Usuario autor no encontrado');
+			}  
+
 			return res.status(StatusCodes.CREATED).json({ message: 'Reporte enviado correctamente' });
 		} catch (error) {
 			console.error('Error al reportar la publicación:', error);
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al reportar la publicación', error });
 		}
+	}
+	// En checkAndUpdateUserStatus asegúrate de que IUser esté importado
+	private async checkAndUpdateUserStatus(user: IUser): Promise<void> {
+		const Settings = SettingsModel(this.app.getClientMongoose());
+		const settings = await Settings.findOne().exec();
+
+		if (!settings) {
+			console.error('No se encontraron los ajustes de configuración.');
+			return;
+		}
+
+		const reportThreshold = settings.reportThreshold;
+		const notificationThreshold = settings.notificationThreshold;
+
+		if (user.reportCount >= reportThreshold) {
+			user.status = 'blacklisted';
+			await user.save();
+			console.log(`Usuario ${user._id} ha sido bloqueado por exceso de reportes.`);
+			// Implementa aquí la lógica adicional si es necesario
+		} else if (user.reportCount >= notificationThreshold) {
+			// Enviar notificación al usuario
+			await this.notifyUser(user);
+		}
+	}
+	// Método para notificar al usuario
+	private async notifyUser(user: IUser): Promise<void> {
+		// Implementa la lógica para enviar una notificación al usuario
+		// Por ejemplo, puedes enviar un correo electrónico o una notificación en la aplicación
+		console.log(`Enviando notificación al usuario ${user._id} por reportes acumulados.`);
 	}
 	// Método para dar like a una publicación
 	private async likePublication(req: AuthRequest, res: Response): Promise<Response> {
@@ -478,11 +585,14 @@ export class PublicationController {
 			const userObjectId = new mongoose.Types.ObjectId(userId);
 
 			// Intentar agregar el userId al array de likes usando $addToSet
-			const publication = await this.publicationModel.findByIdAndUpdate(
-				publicationId,
-				{ $addToSet: { likes: userObjectId } },
-				{ new: true }
-			).exec();
+const publication = await this.publicationModel.findByIdAndUpdate(
+  publicationId,
+  {
+    $addToSet: { likes: userObjectId },
+    $inc: { likesCount: 1 },
+  },
+  { new: true }
+).exec();
 
 			if (!publication) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
@@ -492,6 +602,7 @@ export class PublicationController {
 				message: 'Has dado like a la publicación',
 				likesCount: publication.likes.length,
 			});
+
 		} catch (error) {
 			console.error('Error al dar like a la publicación:', error);
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -513,12 +624,14 @@ export class PublicationController {
 			const userObjectId = new mongoose.Types.ObjectId(userId);
 
 			// Intentar eliminar el userId del array de likes usando $pull
-			const publication = await this.publicationModel.findByIdAndUpdate(
-				publicationId,
-				{ $pull: { likes: userObjectId } },
-				{ new: true }
-			).exec();
-
+const publication = await this.publicationModel.findByIdAndUpdate(
+  publicationId,
+  {
+    $addToSet: { likes: userObjectId },
+    $inc: { likesCount: 1 },
+  },
+  { new: true }
+).exec();
 			if (!publication) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
 			}
@@ -565,6 +678,80 @@ export class PublicationController {
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al buscar publicaciones', error });
 		}
 	}
+private async listMostLikedPublications(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+
+    const User = UserModel(this.app.getClientMongoose());
+
+    // Obtener usuarios bloqueados y que han bloqueado al usuario actual
+    const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
+    const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
+
+    const me = await User.findById(userId).select('blockedUsers').exec();
+    const myBlockedUserIds = me ? me.blockedUsers : [];
+
+    const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
+
+    // Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por likesCount
+    const publications = await this.publicationModel.find({
+      author: { $nin: excludedUserIds }
+    })
+    .populate({
+      path: 'author',
+      select: 'username',
+      populate: {
+        path: 'profile',
+        select: 'profilePicture'
+      }
+    })
+    .sort({ likesCount: -1 }) // Ordenar por likesCount descendente
+    .exec();
+
+    res.status(StatusCodes.OK).json({ publications });
+  } catch (error) {
+    console.error('Error al listar las publicaciones más gustadas:', error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más gustadas', error });
+  }
+}
+
+private async listMostCommentedPublications(req: AuthRequest, res: Response): Promise<void> {
+  try {
+    const userId = req.userId;
+
+    const User = UserModel(this.app.getClientMongoose());
+
+    // Obtener usuarios bloqueados y que han bloqueado al usuario actual
+    const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
+    const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
+
+    const me = await User.findById(userId).select('blockedUsers').exec();
+    const myBlockedUserIds = me ? me.blockedUsers : [];
+
+    const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
+
+    // Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por commentsCount
+    const publications = await this.publicationModel.find({
+      author: { $nin: excludedUserIds }
+    })
+    .populate({
+      path: 'author',
+      select: 'username',
+      populate: {
+        path: 'profile',
+        select: 'profilePicture'
+      }
+    })
+    .sort({ commentsCount: -1 }) // Ordenar por commentsCount descendente
+    .exec();
+
+    res.status(StatusCodes.OK).json({ publications });
+  } catch (error) {
+    console.error('Error al listar las publicaciones más comentadas:', error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más comentadas', error });
+  }
+}
+
 
 }
 

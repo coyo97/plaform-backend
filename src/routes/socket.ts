@@ -292,43 +292,43 @@ export class SocketController {
 			socket.to(streamId).emit('ice-candidate', candidate); // Emitir candidato ICE
 		});
 	}
-public async emitMessageDeletion(
-  messageId: string,
-  isGroup: boolean,
-  receiverId?: string,
-  groupId?: string
-): Promise<void> {
-  // Emitir a los usuarios correspondientes
-  if (isGroup) {
-    // Emitir a todos los miembros del grupo
-    const group = await this.groupModel.findById(groupId).populate('members');
-    if (!group) {
-      console.error('Grupo no encontrado');
-      return;
-    }
+	public async emitMessageDeletion(
+		messageId: string,
+		isGroup: boolean,
+		receiverId?: string,
+		groupId?: string
+	): Promise<void> {
+		// Emitir a los usuarios correspondientes
+		if (isGroup) {
+			// Emitir a todos los miembros del grupo
+			const group = await this.groupModel.findById(groupId).populate('members');
+			if (!group) {
+				console.error('Grupo no encontrado');
+				return;
+			}
 
-    group.members.forEach((member: any) => {
-      const memberId = member._id.toString();
-      const memberSocketId = this.connectedUsers.get(memberId);
-      if (memberSocketId) {
-        this.io.to(memberSocketId).emit('message-deleted', { messageId });
-      }
-    });
-  } else {
-    // Emitir al receptor
-    if (!receiverId) {
-      console.error('receiverId is undefined for a private message deletion.');
-      return;
-    }
+			group.members.forEach((member: any) => {
+				const memberId = member._id.toString();
+				const memberSocketId = this.connectedUsers.get(memberId);
+				if (memberSocketId) {
+					this.io.to(memberSocketId).emit('message-deleted', { messageId });
+				}
+			});
+		} else {
+			// Emitir al receptor
+			if (!receiverId) {
+				console.error('receiverId is undefined for a private message deletion.');
+				return;
+			}
 
-    const receiverSocketId = this.connectedUsers.get(receiverId);
-    if (receiverSocketId) {
-      this.io.to(receiverSocketId).emit('message-deleted', { messageId });
-    } else {
-      console.warn(`Usuario destino ${receiverId} no está conectado.`);
-    }
-  }
-}
+			const receiverSocketId = this.connectedUsers.get(receiverId);
+			if (receiverSocketId) {
+				this.io.to(receiverSocketId).emit('message-deleted', { messageId });
+			} else {
+				console.warn(`Usuario destino ${receiverId} no está conectado.`);
+			}
+		}
+	}
 }
 
 export default SocketController;

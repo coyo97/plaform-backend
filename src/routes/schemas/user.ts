@@ -1,4 +1,4 @@
-import mongoose, { Schema, Document, Mongoose } from "mongoose";
+import mongoose, { Schema, Document, Mongoose, Types } from "mongoose";
 import { IRole } from "./role";
 import { ICareer } from "./career"; // Importa el modelo de carrera
 
@@ -12,6 +12,10 @@ export interface IUser extends Document {
   status: string;
   friends: mongoose.Types.ObjectId[]; // Lista de amigos
   friendRequests: mongoose.Types.ObjectId[]; // Solicitudes de amistad recibidas
+  //para rastrear
+    reportCount: number;
+  uniqueReporters: Types.ObjectId[];
+  blockedUsers: Types.ObjectId[]; // Opción alternativa
 }
 
 const userSchema: Schema<IUser> = new Schema({
@@ -23,6 +27,10 @@ const userSchema: Schema<IUser> = new Schema({
   status: { type: String, enum: ['active', 'deactivated', 'blacklisted'], default: 'active' },
   friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
   friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
+  //para rastrear usuario y contar sus reportes
+  reportCount: { type: Number, default: 0 },
+  uniqueReporters: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+  blockedUsers: [{ type: mongoose.Types.ObjectId, ref: 'User' }], // Añade esto
 });
 
 userSchema.virtual('profile', {

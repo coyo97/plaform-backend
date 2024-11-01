@@ -4,12 +4,14 @@ import { StatusCodes } from "http-status-codes";
 import App from '../app';
 import { UserModel, IUser } from "./schemas/user";
 import { RoleModel, IRole } from './schemas/role';
-import { Model } from "mongoose";
+import { Model, Types } from "mongoose";
 import bcrypt from 'bcrypt';
 import { generateToken } from "../authentication/authUser";
 import { authMiddleware, adminMiddleware } from "../middlware/authMiddlewares";
 import { body, validationResult } from 'express-validator';
 import mongoose from 'mongoose';
+import { NotificationModel } from './schemas/notification';
+import SocketController from './socket'; 
 
 interface AuthRequest extends Request {
 	userId?: string;
@@ -24,12 +26,16 @@ export class UserController {
 	private app: App;
 	private express: Express;
 	private user: Model<IUser>;
+	private notificationModel: ReturnType<typeof NotificationModel>;
+	private socketController: SocketController;
 
-	constructor(app: App, route: string) {
+	constructor(app: App, route: string, socketController: SocketController) {
 		this.route = route;
 		this.app = app;
 		this.express = this.app.getAppServer();
 		this.user = UserModel(this.app.getClientMongoose());
+		this.notificationModel = NotificationModel(this.app.getClientMongoose());
+		this.socketController = socketController;
 		this.initRoutes();
 		console.log(`User Controller initialized at ${this.route}`);
 	}
@@ -47,7 +53,7 @@ export class UserController {
 		this.express.put(`${this.route}/:id`, authMiddleware, this.updateUser.bind(this));
 		// Ruta para eliminar un usuario
 		// Solo los administradores pueden eliminar usuarios
-		this.express.delete(`${this.route}/:id`, authMiddleware, adminMiddleware, this.deleteUser.bind(this));
+		this.express.delete(`${this.route}/:id`, authMiddleware,  this.deleteUser.bind(this));
 		// Ruta para obtener el perfil del usuario autenticado
 		this.express.get(`${this.route}/me`, authMiddleware, this.getMe.bind(this));
 		// En UserController.ts
@@ -61,7 +67,7 @@ export class UserController {
 			],
 			this.assignRoles.bind(this)
 		);
-		// En UserController.ts, dentro de `initRoutes`
+
 		this.express.put(`${this.route}/:id/deactivate`, authMiddleware , this.deactivateUser.bind(this));
 		this.express.put(`${this.route}/:id/reactivate`, authMiddleware, this.reactivateUser.bind(this));
 		this.express.put(`${this.route}/:id/blacklist`, authMiddleware , this.blacklistUser.bind(this));
@@ -83,6 +89,14 @@ export class UserController {
 
 		// Ruta para buscar usuarios
 		this.express.get(`${this.route}/search`, authMiddleware, this.searchUsers.bind(this));
+		// Ruta para eliminar a un amigo
+		this.express.delete(`${this.route}/:id/remove-friend`, authMiddleware, this.removeFriend.bind(this));
+		// Ruta para bloquear a un usuario
+		this.express.post(`${this.route}/:id/block`, authMiddleware, this.blockUser.bind(this));
+// Ruta para obtener la lista de usuarios bloqueados
+this.express.get(`${this.route}/blocked-users`, authMiddleware, this.getBlockedUsers.bind(this));
+// Ruta para desbloquear a un usuario
+this.express.post(`${this.route}/:id/unblock`, authMiddleware, this.unblockUser.bind(this));
 
 
 		// Inicializar la ruta de login
@@ -92,7 +106,7 @@ export class UserController {
 	private async getUsers(req: Request, res: Response): Promise<void> {
 		try {
 			const list = await this.user.find()
-			.select('username email roles status') // Selecciona los campos que necesitas
+			.select('username email roles status reportCount') // Selecciona los campos que necesitas
 			//o podemos comentar el select y se mostrara todos los campos
 			.populate({
 				path: 'profile',
@@ -339,7 +353,14 @@ export class UserController {
 				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario ya es tu amigo' });
 				return;
 			}
-
+			if (receiver.blockedUsers.includes(sender._id)) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes enviar una solicitud a este usuario' });
+				return;
+			}
+			if (sender.blockedUsers.includes(receiver._id)) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes enviar una solicitud a este usuario' });
+				return;
+			}
 			// Verificar si ya hay una solicitud pendiente
 			if (receiver.friendRequests.includes(sender._id)) {
 				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Ya has enviado una solicitud a este usuario' });
@@ -349,6 +370,19 @@ export class UserController {
 			// Agregar la solicitud de amistad al receptor
 			receiver.friendRequests.push(sender._id);
 			await receiver.save();
+
+			// **Crear una notificación para el receptor**
+			const notification = new this.notificationModel({
+				recipient: receiver._id,
+				sender: sender._id,
+				type: 'friend_request',
+				message: `${sender.username} te ha enviado una solicitud de amistad`,
+			});
+			await notification.save();
+
+			// **Emitir la notificación en tiempo real**
+			this.socketController.emitNotification(receiver._id.toString(), notification);
+
 
 			res.status(StatusCodes.OK).json({ message: 'Solicitud de amistad enviada' });
 		} catch (error) {
@@ -393,6 +427,18 @@ export class UserController {
 			await receiver.save();
 			await sender.save();
 
+			// **Crear una notificación para el remitente**
+			const notification = new this.notificationModel({
+				recipient: sender._id,
+				sender: receiver._id,
+				type: 'friend_request_accepted',
+				message: `${receiver.username} ha aceptado tu solicitud de amistad`,
+			});
+			await notification.save();
+
+			// **Emitir la notificación en tiempo real**
+			this.socketController.emitNotification(sender._id.toString(), notification);
+
 			res.status(StatusCodes.OK).json({ message: 'Solicitud de amistad aceptada' });
 		} catch (error) {
 			console.error('Error al aceptar la solicitud de amistad:', error);
@@ -410,24 +456,37 @@ export class UserController {
 			}
 
 			const receiver = await this.user.findById(receiverId);
+			const sender = await this.user.findById(senderId);
 
-			if (!receiver) {
+			if (!receiver || !sender) {
 				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
 				return;
 			}
-			const senderObjectId = new mongoose.Types.ObjectId(senderId);
+
 			// Verificar si hay una solicitud de amistad pendiente
-			if (!receiver.friendRequests.includes(senderObjectId)) {
+			if (!receiver.friendRequests.includes(sender._id)) {
 				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No tienes una solicitud de este usuario' });
 				return;
 			}
 
 			// Eliminar la solicitud de amistad
 			receiver.friendRequests = receiver.friendRequests.filter(
-				(id) => !id.equals(senderId)
+				(id) => !id.equals(sender._id)
 			);
 
 			await receiver.save();
+
+			// **Crear una notificación para el remitente**
+			const notification = new this.notificationModel({
+				recipient: sender._id,
+				sender: receiver._id,
+				type: 'friend_request_rejected',
+				message: `${receiver.username} ha rechazado tu solicitud de amistad`,
+			});
+			await notification.save();
+
+			// **Emitir la notificación en tiempo real**
+			this.socketController.emitNotification(sender._id.toString(), notification);
 
 			res.status(StatusCodes.OK).json({ message: 'Solicitud de amistad rechazada' });
 		} catch (error) {
@@ -435,6 +494,7 @@ export class UserController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al rechazar la solicitud de amistad', error });
 		}
 	}
+
 	private async getFriendRequests(req: AuthRequest, res: Response): Promise<void> {
 		const userId = req.userId;
 
@@ -540,5 +600,152 @@ export class UserController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al buscar usuarios', error });
 		}
 	}
+	private async removeFriend(req: AuthRequest, res: Response): Promise<void> {
+		const userId = req.userId;
+		const friendId = req.params.id;
+
+		try {
+			if (!userId) {
+				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+				return;
+			}
+
+			const user = await this.user.findById(userId);
+			const friend = await this.user.findById(friendId);
+
+			if (!user || !friend) {
+				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+				return;
+			}
+
+			// Verificar si son amigos
+			if (!user.friends.includes(friend._id)) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario no es tu amigo' });
+				return;
+			}
+
+			// Eliminar al amigo de la lista de amigos del usuario
+			user.friends = user.friends.filter((id) => !id.equals(friend._id));
+			// Eliminar al usuario de la lista de amigos del amigo
+			friend.friends = friend.friends.filter((id) => !id.equals(user._id));
+
+			await user.save();
+			await friend.save();
+
+			res.status(StatusCodes.OK).json({ message: 'Amigo eliminado' });
+		} catch (error) {
+			console.error('Error al eliminar al amigo:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar al amigo', error });
+		}
+	}
+	private async blockUser(req: AuthRequest, res: Response): Promise<void> {
+		const userId = req.userId;
+		const blockedUserId = req.params.id;
+
+		try {
+			if (!userId) {
+				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+				return;
+			}
+
+			if (userId === blockedUserId) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes bloquearte a ti mismo' });
+				return;
+			}
+
+			const user = await this.user.findById(userId);
+			const blockedUser = await this.user.findById(blockedUserId);
+
+			if (!user || !blockedUser) {
+				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+				return;
+			}
+
+			// Verificar si ya está bloqueado
+			if (user.blockedUsers.some((id) => id.equals(blockedUser._id))) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario ya está bloqueado' });
+				return;
+			}
+
+			// Agregar el usuario a la lista de usuarios bloqueados
+			user.blockedUsers.push(blockedUser._id);
+
+			// Si son amigos, eliminar la amistad
+			user.friends = user.friends.filter((id) => !id.equals(blockedUser._id));
+			blockedUser.friends = blockedUser.friends.filter((id) => !id.equals(user._id));
+
+			await user.save();
+			await blockedUser.save();
+
+			res.status(StatusCodes.OK).json({ message: 'Usuario bloqueado' });
+		} catch (error) {
+			console.error('Error al bloquear al usuario:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al bloquear al usuario', error });
+		}
+	}
+private async getBlockedUsers(req: AuthRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+
+  try {
+    if (!userId) {
+      res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+      return;
+    }
+
+    const user = await this.user.findById(userId)
+      .populate('blockedUsers', 'username email') // Popula los datos de los usuarios bloqueados
+      .exec();
+
+    if (!user) {
+      res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    res.status(StatusCodes.OK).json({ blockedUsers: user.blockedUsers });
+  } catch (error) {
+    console.error('Error al obtener la lista de usuarios bloqueados:', error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener la lista de usuarios bloqueados', error });
+  }
+}
+private async unblockUser(req: AuthRequest, res: Response): Promise<void> {
+  const userId = req.userId;
+  const unblockUserId = req.params.id;
+
+  try {
+    if (!userId) {
+      res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+      return;
+    }
+
+    if (userId === unblockUserId) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes desbloquearte a ti mismo' });
+      return;
+    }
+
+    const user = await this.user.findById(userId);
+
+    if (!user) {
+      res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+      return;
+    }
+
+    // Verificar si el usuario está bloqueado
+    if (!user.blockedUsers.some((id) => id.equals(unblockUserId))) {
+      res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario no está bloqueado' });
+      return;
+    }
+
+    // Remover al usuario de la lista de usuarios bloqueados
+    user.blockedUsers = user.blockedUsers.filter((id) => !id.equals(unblockUserId));
+
+    await user.save();
+
+    res.status(StatusCodes.OK).json({ message: 'Usuario desbloqueado' });
+  } catch (error) {
+    console.error('Error al desbloquear al usuario:', error);
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al desbloquear al usuario', error });
+  }
+}
+
 }
 

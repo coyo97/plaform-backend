@@ -9,6 +9,7 @@ export interface INotification extends Document {
   message: string;
   isRead: boolean;
   createdAt: Date;
+   data?: any; // Add this line
 }
 
 const notificationSchema: Schema<INotification> = new Schema({
@@ -18,7 +19,10 @@ const notificationSchema: Schema<INotification> = new Schema({
   message: { type: String, required: true },
   isRead: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
-});
+   data: { type: Schema.Types.Mixed }, // Add this line
+},
+ { timestamps: true }
+);
 
 export const NotificationModel = (mongoose: Mongoose) => {
   return mongoose.model<INotification>('Notification', notificationSchema);

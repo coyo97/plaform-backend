@@ -77,10 +77,10 @@ export class MessageController {
 			this.sendMessageWithFile.bind(this)
 		);
 		this.app.getAppServer().delete(
-    `${this.route}/messages/:messageId`,
-    authMiddleware,
-    this.deleteMessage.bind(this)
-  );
+			`${this.route}/messages/:messageId`,
+			authMiddleware,
+			this.deleteMessage.bind(this)
+		);
 	}
 	// Método para enviar un mensaje a través de HTTP
 	private async sendMessage(req: AuthRequest, res: Response): Promise<Response> {
@@ -264,47 +264,47 @@ file: req.file,
 		}
 	}
 	private async deleteMessage(req: AuthRequest, res: Response): Promise<Response> {
-  try {
-    const { messageId } = req.params;
-    const userId = req.userId;
+		try {
+			const { messageId } = req.params;
+			const userId = req.userId;
 
-    if (!userId) {
-      return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-    }
+			if (!userId) {
+				return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+			}
 
-    if (!messageId || !Types.ObjectId.isValid(messageId)) {
-      return res.status(StatusCodes.BAD_REQUEST).json({ message: 'ID de mensaje inválido' });
-    }
+			if (!messageId || !Types.ObjectId.isValid(messageId)) {
+				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'ID de mensaje inválido' });
+			}
 
-    // Buscar el mensaje
-    const message = await this.messageModel.findById(messageId);
+			// Buscar el mensaje
+			const message = await this.messageModel.findById(messageId);
 
-    if (!message) {
-      return res.status(StatusCodes.NOT_FOUND).json({ message: 'Mensaje no encontrado' });
-    }
+			if (!message) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Mensaje no encontrado' });
+			}
 
-    // Verificar si el usuario está autorizado para eliminar el mensaje
-    if (message.sender.toString() !== userId /* && !userIsAdmin */) {
-      return res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes permiso para eliminar este mensaje' });
-    }
+			// Verificar si el usuario está autorizado para eliminar el mensaje
+			if (message.sender.toString() !== userId /* && !userIsAdmin */) {
+				return res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes permiso para eliminar este mensaje' });
+			}
 
-    // Eliminar el mensaje
-    await message.deleteOne();
+			// Eliminar el mensaje
+			await message.deleteOne();
 
-    // Emitir un evento a través del socket para notificar a los clientes
-    await this.socketController.emitMessageDeletion(
-      messageId,
-      message.isGroupMessage,
-      message.receiver?.toString(),
-      message.groupId?.toString()
-    );
+			// Emitir un evento a través del socket para notificar a los clientes
+			await this.socketController.emitMessageDeletion(
+				messageId,
+				message.isGroupMessage,
+				message.receiver?.toString(),
+				message.groupId?.toString()
+			);
 
-    return res.status(StatusCodes.OK).json({ message: 'Mensaje eliminado exitosamente' });
-  } catch (error) {
-    console.error('Error al eliminar el mensaje:', error);
-    return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar el mensaje', error });
-  }
-}
+			return res.status(StatusCodes.OK).json({ message: 'Mensaje eliminado exitosamente' });
+		} catch (error) {
+			console.error('Error al eliminar el mensaje:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar el mensaje', error });
+		}
+	}
 
 }
 

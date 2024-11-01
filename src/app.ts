@@ -79,7 +79,7 @@ export default class App {
 	}
 
 	private initRoutes(service: string): void {
-		const userController = new UserController(this, `/${this.apiVersion}/${this.apiPrefix}/${service}`);
+		const userController = new UserController(this, `/${this.apiVersion}/${this.apiPrefix}/${service}`, this.socketController);
 		userController.initLoginRoute();
 		new RoleController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new PublicationController(this, `/${this.apiVersion}/${this.apiPrefix}`);

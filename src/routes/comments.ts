@@ -131,6 +131,10 @@ export class CommentController {
 			});
 
 			const savedComment = await newComment.save();
+			await PublicationModel(this.app.getClientMongoose()).findByIdAndUpdate(
+  publicationId,
+  { $inc: { commentsCount: 1 } }
+);
 
 			// Popula el comentario para obtener detalles del autor
 			const populatedComment = await savedComment.populate('author', 'username');
@@ -148,17 +152,23 @@ export class CommentController {
 					sender: userId,
 					type: 'comment',
 					message: 'Ha comentado tu publicación',
+					data: {
+						publicationId: publicationId,
+						commentId: populatedComment._id,
+					},
 				});
 				await notification.save();
 
 				// **Emitir notificación en tiempo real utilizando SocketController**
 				const notificationData = {
-					message: `El usuario ${userId} ha comentado tu publicación`,
-					type: 'comment',
-					data: {
-						publicationId,
-						comment: populatedComment,
-					},
+					_id: notification._id,
+					recipient: notification.recipient,
+					sender: notification.sender,
+					type: notification.type,
+					message: notification.message,
+					isRead: notification.isRead,
+					createdAt: notification.createdAt,
+					data: notification.data, // Include the data field	
 				};
 				this.socketController.emitNotification(publication.author._id.toString(), notificationData);
 			}
@@ -217,7 +227,12 @@ export class CommentController {
 			if (!comment) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Comment not found or you are not the author' });
 			}
-
+if (comment) {
+  await PublicationModel(this.app.getClientMongoose()).findByIdAndUpdate(
+    comment.publication,
+    { $inc: { commentsCount: -1 } }
+  );
+}
 			return res.status(StatusCodes.OK).json({ message: 'Comment deleted successfully' });
 		} catch (error) {
 			console.error('Error deleting comment:', error);

@@ -13,6 +13,10 @@ export interface IPublication extends Document {
   fileType?: string;
   career: ICareer['_id']; // Nuevo campo para la carrera
   likes: Types.ObjectId[]; // Array de ObjectId
+  likesCount: number; // Añadido
+  commentsCount: number; // Añadido
+    createdAt?: Date; // Campo creado automáticamente
+  updatedAt?: Date; // Campo creado automáticamente
 }
 
 const publicationSchema: Schema<IPublication> = new Schema({
@@ -25,7 +29,12 @@ const publicationSchema: Schema<IPublication> = new Schema({
   fileType: { type: String },
   career: { type: mongoose.Schema.Types.ObjectId, ref: 'Career', required: true }, // Campo obligatorio para la carrera
   likes: [{ type: Schema.Types.ObjectId, ref: 'User', default: [] }],
-});
+    likesCount: { type: Number, default: 0 }, // Añadido
+    commentsCount: { type: Number, default: 0 }, // Añadido
+},{
+    timestamps: true, // Habilita createdAt y updatedAt
+  }
+														  );
 
 // Agregar índice de texto en los campos title, content y tags
 publicationSchema.index({ title: 'text', content: 'text', tags: 'text' });

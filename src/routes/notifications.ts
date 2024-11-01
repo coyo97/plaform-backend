@@ -46,6 +46,12 @@ export class NotificationController {
 			authMiddleware,
 			this.markAsRead.bind(this)
 		);
+		// Ruta para eliminar una notificación
+		this.app.getAppServer().delete(
+			`${this.route}/notifications/:notificationId`,
+			authMiddleware,
+			this.deleteNotification.bind(this)
+		);
 	}
 
 	private async getUserNotifications(req: AuthRequest, res: Response): Promise<Response> {
@@ -84,6 +90,10 @@ export class NotificationController {
 				usersToNotify = users.map((user: any) => user._id.toString());
 			} else if (Array.isArray(recipients)) {
 				usersToNotify = recipients;
+			}
+			else if (typeof recipients === 'string') {
+				usersToNotify = [recipients];
+
 			} else {
 				return res.status(StatusCodes.BAD_REQUEST).json({ message: 'Invalid recipients format' });
 			}
@@ -131,6 +141,27 @@ export class NotificationController {
 		} catch (error) {
 			console.error('Error marking notification as read:', error);
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error marking notification as read', error });
+		}
+	}
+	private async deleteNotification(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const { notificationId } = req.params;
+			const userId = req.userId;
+
+			// Verificar que la notificación existe y pertenece al usuario
+			const notification = await this.notificationModel.findOneAndDelete({
+				_id: notificationId,
+				recipient: userId,
+			});
+
+			if (!notification) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Notificación no encontrada' });
+			}
+
+			return res.status(StatusCodes.OK).json({ message: 'Notificación eliminada' });
+		} catch (error) {
+			console.error('Error al eliminar la notificación:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar la notificación', error });
 		}
 	}
 }
