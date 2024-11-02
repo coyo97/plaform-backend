@@ -24,6 +24,7 @@ import { NotificationController } from './routes/notifications';
 import { FileFormatController } from './routes/fileFormatController';
 import { SettingsController } from './routes/settingsController';
 import { ReportController } from './routes/reportController';
+import { PermissionsController } from './routes/permissionsController';
 
 if (process.env.NODE_ENV !== 'production') {
 	dotenv.config();
@@ -96,6 +97,7 @@ export default class App {
 		new FileFormatController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new SettingsController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new ReportController(this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new PermissionsController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 	}
 
 	private async setupDatabase() {

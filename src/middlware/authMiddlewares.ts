@@ -64,7 +64,7 @@ export const adminMiddleware = async (req: AuthRequest, res: Response, next: Nex
 		}
 
 		// Verificar si el usuario tiene el rol de administrador
-		const isAdmin = user.roles.some(role => role.name === 'admin');
+		const isAdmin = user.roles.some(role => role.name === 'admi');
 
 		if (!isAdmin) {
 			return res.status(StatusCodes.FORBIDDEN).json({ message: 'Acceso denegado. Se requiere rol de administrador.' });

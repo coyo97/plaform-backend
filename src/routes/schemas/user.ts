@@ -3,47 +3,47 @@ import { IRole } from "./role";
 import { ICareer } from "./career"; // Importa el modelo de carrera
 
 export interface IUser extends Document {
-  _id: mongoose.Types.ObjectId;
-  username: string;
-  email: string;
-  password: string;
-  roles: IRole[];
-  careers: ICareer['_id'][]; // Campo para almacenar las carreras seleccionadas
-  status: string;
-  friends: mongoose.Types.ObjectId[]; // Lista de amigos
-  friendRequests: mongoose.Types.ObjectId[]; // Solicitudes de amistad recibidas
-  //para rastrear
-    reportCount: number;
-  uniqueReporters: Types.ObjectId[];
-  blockedUsers: Types.ObjectId[]; // Opción alternativa
+	_id: mongoose.Types.ObjectId;
+	username: string;
+	email: string;
+	password: string;
+	roles: IRole[];
+	careers: ICareer['_id'][]; // Campo para almacenar las carreras seleccionadas
+	status: string;
+	friends: mongoose.Types.ObjectId[]; // Lista de amigos
+	friendRequests: mongoose.Types.ObjectId[]; // Solicitudes de amistad recibidas
+	//para rastrear
+	reportCount: number;
+	uniqueReporters: Types.ObjectId[];
+	blockedUsers: Types.ObjectId[]; // Opción alternativa
 }
 
 const userSchema: Schema<IUser> = new Schema({
-  username: { type: String, required: true },
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  roles: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Role' }],
-  careers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Career' }], // Campo para carreras
-  status: { type: String, enum: ['active', 'deactivated', 'blacklisted'], default: 'active' },
-  friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
-  friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
-  //para rastrear usuario y contar sus reportes
-  reportCount: { type: Number, default: 0 },
-  uniqueReporters: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
-  blockedUsers: [{ type: mongoose.Types.ObjectId, ref: 'User' }], // Añade esto
+	username: { type: String, required: true },
+	email: { type: String, required: true, unique: true },
+	password: { type: String, required: true },
+	roles: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Role' }],
+	careers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Career' }], // Campo para carreras
+	status: { type: String, enum: ['active', 'deactivated', 'blacklisted'], default: 'active' },
+	friends: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
+	friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }], // Añadido
+	//para rastrear usuario y contar sus reportes
+	reportCount: { type: Number, default: 0 },
+	uniqueReporters: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+	blockedUsers: [{ type: mongoose.Types.ObjectId, ref: 'User' }], // Añade esto
 });
 
 userSchema.virtual('profile', {
-  ref: 'Profile',
-  localField: '_id',
-  foreignField: 'user',
-  justOne: true,
+	ref: 'Profile',
+	localField: '_id',
+	foreignField: 'user',
+	justOne: true,
 });
 
 userSchema.set('toObject', { virtuals: true });
 userSchema.set('toJSON', { virtuals: true });
 
 export const UserModel = (mongoose: Mongoose) => {
-  return mongoose.model<IUser>("User", userSchema);
+	return mongoose.model<IUser>("User", userSchema);
 };
 

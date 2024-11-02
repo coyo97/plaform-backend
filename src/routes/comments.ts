@@ -132,9 +132,9 @@ export class CommentController {
 
 			const savedComment = await newComment.save();
 			await PublicationModel(this.app.getClientMongoose()).findByIdAndUpdate(
-  publicationId,
-  { $inc: { commentsCount: 1 } }
-);
+				publicationId,
+				{ $inc: { commentsCount: 1 } }
+			);
 
 			// Popula el comentario para obtener detalles del autor
 			const populatedComment = await savedComment.populate('author', 'username');
@@ -227,12 +227,12 @@ export class CommentController {
 			if (!comment) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Comment not found or you are not the author' });
 			}
-if (comment) {
-  await PublicationModel(this.app.getClientMongoose()).findByIdAndUpdate(
-    comment.publication,
-    { $inc: { commentsCount: -1 } }
-  );
-}
+			if (comment) {
+				await PublicationModel(this.app.getClientMongoose()).findByIdAndUpdate(
+					comment.publication,
+					{ $inc: { commentsCount: -1 } }
+				);
+			}
 			return res.status(StatusCodes.OK).json({ message: 'Comment deleted successfully' });
 		} catch (error) {
 			console.error('Error deleting comment:', error);

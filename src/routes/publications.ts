@@ -61,19 +61,19 @@ export class PublicationController {
 		);
 		//esta rutas deben ir mas antes que las rutas genericas: ej. /publications/:id.
 
- // Ruta para listar publicaciones más gustadas
-  this.app.getAppServer().get(
-    `${this.route}/publications/most-liked`,
-    authMiddleware,
-    this.listMostLikedPublications.bind(this)
-  );
+		// Ruta para listar publicaciones más gustadas
+		this.app.getAppServer().get(
+			`${this.route}/publications/most-liked`,
+			authMiddleware,
+			this.listMostLikedPublications.bind(this)
+		);
 
-  // Ruta para listar publicaciones más comentadas
-  this.app.getAppServer().get(
-    `${this.route}/publications/most-commented`,
-    authMiddleware,
-    this.listMostCommentedPublications.bind(this)
-  );
+		// Ruta para listar publicaciones más comentadas
+		this.app.getAppServer().get(
+			`${this.route}/publications/most-commented`,
+			authMiddleware,
+			this.listMostCommentedPublications.bind(this)
+		);
 
 		// Ruta para actualizar una publicación existente
 		this.app.getAppServer().put(
@@ -585,14 +585,14 @@ export class PublicationController {
 			const userObjectId = new mongoose.Types.ObjectId(userId);
 
 			// Intentar agregar el userId al array de likes usando $addToSet
-const publication = await this.publicationModel.findByIdAndUpdate(
-  publicationId,
-  {
-    $addToSet: { likes: userObjectId },
-    $inc: { likesCount: 1 },
-  },
-  { new: true }
-).exec();
+			const publication = await this.publicationModel.findByIdAndUpdate(
+				publicationId,
+				{
+					$addToSet: { likes: userObjectId },
+					$inc: { likesCount: 1 },
+				},
+				{ new: true }
+			).exec();
 
 			if (!publication) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
@@ -624,14 +624,14 @@ const publication = await this.publicationModel.findByIdAndUpdate(
 			const userObjectId = new mongoose.Types.ObjectId(userId);
 
 			// Intentar eliminar el userId del array de likes usando $pull
-const publication = await this.publicationModel.findByIdAndUpdate(
-  publicationId,
-  {
-    $addToSet: { likes: userObjectId },
-    $inc: { likesCount: 1 },
-  },
-  { new: true }
-).exec();
+			const publication = await this.publicationModel.findByIdAndUpdate(
+				publicationId,
+				{
+					$addToSet: { likes: userObjectId },
+					$inc: { likesCount: 1 },
+				},
+				{ new: true }
+			).exec();
 			if (!publication) {
 				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Publicación no encontrada' });
 			}
@@ -678,79 +678,79 @@ const publication = await this.publicationModel.findByIdAndUpdate(
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al buscar publicaciones', error });
 		}
 	}
-private async listMostLikedPublications(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const userId = req.userId;
+	private async listMostLikedPublications(req: AuthRequest, res: Response): Promise<void> {
+		try {
+			const userId = req.userId;
 
-    const User = UserModel(this.app.getClientMongoose());
+			const User = UserModel(this.app.getClientMongoose());
 
-    // Obtener usuarios bloqueados y que han bloqueado al usuario actual
-    const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
-    const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
+			// Obtener usuarios bloqueados y que han bloqueado al usuario actual
+			const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
+			const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
 
-    const me = await User.findById(userId).select('blockedUsers').exec();
-    const myBlockedUserIds = me ? me.blockedUsers : [];
+			const me = await User.findById(userId).select('blockedUsers').exec();
+			const myBlockedUserIds = me ? me.blockedUsers : [];
 
-    const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
+			const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
 
-    // Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por likesCount
-    const publications = await this.publicationModel.find({
-      author: { $nin: excludedUserIds }
-    })
-    .populate({
-      path: 'author',
-      select: 'username',
-      populate: {
-        path: 'profile',
-        select: 'profilePicture'
-      }
-    })
-    .sort({ likesCount: -1 }) // Ordenar por likesCount descendente
-    .exec();
+			// Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por likesCount
+			const publications = await this.publicationModel.find({
+				author: { $nin: excludedUserIds }
+			})
+			.populate({
+				path: 'author',
+				select: 'username',
+				populate: {
+					path: 'profile',
+					select: 'profilePicture'
+				}
+			})
+			.sort({ likesCount: -1 }) // Ordenar por likesCount descendente
+			.exec();
 
-    res.status(StatusCodes.OK).json({ publications });
-  } catch (error) {
-    console.error('Error al listar las publicaciones más gustadas:', error);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más gustadas', error });
-  }
-}
+			res.status(StatusCodes.OK).json({ publications });
+		} catch (error) {
+			console.error('Error al listar las publicaciones más gustadas:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más gustadas', error });
+		}
+	}
 
-private async listMostCommentedPublications(req: AuthRequest, res: Response): Promise<void> {
-  try {
-    const userId = req.userId;
+	private async listMostCommentedPublications(req: AuthRequest, res: Response): Promise<void> {
+		try {
+			const userId = req.userId;
 
-    const User = UserModel(this.app.getClientMongoose());
+			const User = UserModel(this.app.getClientMongoose());
 
-    // Obtener usuarios bloqueados y que han bloqueado al usuario actual
-    const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
-    const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
+			// Obtener usuarios bloqueados y que han bloqueado al usuario actual
+			const usersWhoBlockedMe = await User.find({ blockedUsers: userId }).select('_id').exec();
+			const blockedByUserIds = usersWhoBlockedMe.map(user => user._id);
 
-    const me = await User.findById(userId).select('blockedUsers').exec();
-    const myBlockedUserIds = me ? me.blockedUsers : [];
+			const me = await User.findById(userId).select('blockedUsers').exec();
+			const myBlockedUserIds = me ? me.blockedUsers : [];
 
-    const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
+			const excludedUserIds = blockedByUserIds.concat(myBlockedUserIds);
 
-    // Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por commentsCount
-    const publications = await this.publicationModel.find({
-      author: { $nin: excludedUserIds }
-    })
-    .populate({
-      path: 'author',
-      select: 'username',
-      populate: {
-        path: 'profile',
-        select: 'profilePicture'
-      }
-    })
-    .sort({ commentsCount: -1 }) // Ordenar por commentsCount descendente
-    .exec();
+			// Obtener publicaciones excluyendo las de usuarios bloqueados y ordenar por commentsCount
+			const publications = await this.publicationModel.find({
+				author: { $nin: excludedUserIds }
+			})
+			.populate({
+				path: 'author',
+				select: 'username',
+				populate: {
+					path: 'profile',
+					select: 'profilePicture'
+				}
+			})
+			.sort({ commentsCount: -1 }) // Ordenar por commentsCount descendente
+			.exec();
 
-    res.status(StatusCodes.OK).json({ publications });
-  } catch (error) {
-    console.error('Error al listar las publicaciones más comentadas:', error);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más comentadas', error });
-  }
-}
+			res.status(StatusCodes.OK).json({ publications });
+		} catch (error) {
+			console.error('Error al listar las publicaciones más comentadas:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más comentadas', error });
+		}
+	}
 
 
 }

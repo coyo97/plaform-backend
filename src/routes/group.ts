@@ -48,12 +48,26 @@ export class GroupController {
 			authMiddleware,
 			this.addUserToGroup.bind(this)
 		);
+		// Ruta para obtener los miembros de un grupo
+		this.app.getAppServer().get(
+			`${this.route}/groups/:groupId/members`,
+			authMiddleware,
+			this.getGroupMembers.bind(this)
+		);
 		// Ruta para eliminar un usuario del grupo
 		this.app.getAppServer().post(
 			`${this.route}/groups/:groupId/removeUser`,
 			authMiddleware,
 			this.removeUserFromGroup.bind(this)
 		);
+
+		// Ruta para obtener los grupos creados por el usuario
+		this.app.getAppServer().get(
+			`${this.route}/groups/mygroups`,
+			authMiddleware,
+			this.getMyGroups.bind(this)
+		);
+
 	}
 
 	// Método para crear un grupo
@@ -213,6 +227,45 @@ export class GroupController {
 			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al eliminar usuario del grupo', error });
 		}
 	}
+	// Método para obtener los grupos creados por el usuario
+	private async getMyGroups(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const userId = req.userId;
+			const groups = await this.groupModel.find({ createdBy: new mongoose.Types.ObjectId(userId) })
+			.populate('members', 'username')
+			.exec();
+			return res.status(StatusCodes.OK).json({ groups });
+		} catch (error) {
+			console.error('Error al obtener los grupos creados por el usuario:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener los grupos creados por el usuario', error });
+		}
+	}
+	// Método para obtener los miembros de un grupo
+	private async getGroupMembers(req: AuthRequest, res: Response): Promise<Response> {
+		try {
+			const userId = req.userId;
+			const { groupId } = req.params;
+
+			const group = await this.groupModel.findById(groupId)
+			.populate('members', 'username email')
+			.exec();
+
+			if (!group) {
+				return res.status(StatusCodes.NOT_FOUND).json({ message: 'Grupo no encontrado' });
+			}
+
+			// Verificar si el usuario es miembro del grupo
+			if (!group.members.some(member => member._id.toString() === userId)) {
+				return res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes permiso para ver los miembros de este grupo' });
+			}
+
+			return res.status(StatusCodes.OK).json({ members: group.members });
+		} catch (error) {
+			console.error('Error al obtener los miembros del grupo:', error);
+			return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener los miembros del grupo', error });
+		}
+	}
+
 }
 
 export default GroupController;

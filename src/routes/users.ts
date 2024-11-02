@@ -53,7 +53,7 @@ export class UserController {
 		this.express.put(`${this.route}/:id`, authMiddleware, this.updateUser.bind(this));
 		// Ruta para eliminar un usuario
 		// Solo los administradores pueden eliminar usuarios
-		this.express.delete(`${this.route}/:id`, authMiddleware,  this.deleteUser.bind(this));
+		this.express.delete(`${this.route}/:id`, authMiddleware, adminMiddleware,  this.deleteUser.bind(this));
 		// Ruta para obtener el perfil del usuario autenticado
 		this.express.get(`${this.route}/me`, authMiddleware, this.getMe.bind(this));
 		// En UserController.ts
@@ -68,12 +68,12 @@ export class UserController {
 			this.assignRoles.bind(this)
 		);
 
-		this.express.put(`${this.route}/:id/deactivate`, authMiddleware , this.deactivateUser.bind(this));
-		this.express.put(`${this.route}/:id/reactivate`, authMiddleware, this.reactivateUser.bind(this));
-		this.express.put(`${this.route}/:id/blacklist`, authMiddleware , this.blacklistUser.bind(this));
+		this.express.put(`${this.route}/:id/deactivate`, authMiddleware, adminMiddleware, this.deactivateUser.bind(this));
+		this.express.put(`${this.route}/:id/reactivate`, authMiddleware,adminMiddleware, this.reactivateUser.bind(this));
+		this.express.put(`${this.route}/:id/blacklist`, authMiddleware, adminMiddleware, this.blacklistUser.bind(this));
 
 		// Ruta para enviar una solicitud de amistad
-		this.express.post(`${this.route}/:id/send-friend-request`, authMiddleware, this.sendFriendRequest.bind(this));
+		this.express.post(`${this.route}/:id/send-friend-request`, authMiddleware,adminMiddleware, this.sendFriendRequest.bind(this));
 
 		// Ruta para aceptar una solicitud de amistad
 		this.express.post(`${this.route}/:id/accept-friend-request`, authMiddleware, this.acceptFriendRequest.bind(this));
@@ -93,10 +93,10 @@ export class UserController {
 		this.express.delete(`${this.route}/:id/remove-friend`, authMiddleware, this.removeFriend.bind(this));
 		// Ruta para bloquear a un usuario
 		this.express.post(`${this.route}/:id/block`, authMiddleware, this.blockUser.bind(this));
-// Ruta para obtener la lista de usuarios bloqueados
-this.express.get(`${this.route}/blocked-users`, authMiddleware, this.getBlockedUsers.bind(this));
-// Ruta para desbloquear a un usuario
-this.express.post(`${this.route}/:id/unblock`, authMiddleware, this.unblockUser.bind(this));
+		// Ruta para obtener la lista de usuarios bloqueados
+		this.express.get(`${this.route}/blocked-users`, authMiddleware, this.getBlockedUsers.bind(this));
+		// Ruta para desbloquear a un usuario
+		this.express.post(`${this.route}/:id/unblock`, authMiddleware, this.unblockUser.bind(this));
 
 
 		// Inicializar la ruta de login
@@ -683,69 +683,69 @@ this.express.post(`${this.route}/:id/unblock`, authMiddleware, this.unblockUser.
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al bloquear al usuario', error });
 		}
 	}
-private async getBlockedUsers(req: AuthRequest, res: Response): Promise<void> {
-  const userId = req.userId;
+	private async getBlockedUsers(req: AuthRequest, res: Response): Promise<void> {
+		const userId = req.userId;
 
-  try {
-    if (!userId) {
-      res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-      return;
-    }
+		try {
+			if (!userId) {
+				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+				return;
+			}
 
-    const user = await this.user.findById(userId)
-      .populate('blockedUsers', 'username email') // Popula los datos de los usuarios bloqueados
-      .exec();
+			const user = await this.user.findById(userId)
+			.populate('blockedUsers', 'username email') // Popula los datos de los usuarios bloqueados
+			.exec();
 
-    if (!user) {
-      res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
-      return;
-    }
+			if (!user) {
+				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+				return;
+			}
 
-    res.status(StatusCodes.OK).json({ blockedUsers: user.blockedUsers });
-  } catch (error) {
-    console.error('Error al obtener la lista de usuarios bloqueados:', error);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener la lista de usuarios bloqueados', error });
-  }
-}
-private async unblockUser(req: AuthRequest, res: Response): Promise<void> {
-  const userId = req.userId;
-  const unblockUserId = req.params.id;
+			res.status(StatusCodes.OK).json({ blockedUsers: user.blockedUsers });
+		} catch (error) {
+			console.error('Error al obtener la lista de usuarios bloqueados:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener la lista de usuarios bloqueados', error });
+		}
+	}
+	private async unblockUser(req: AuthRequest, res: Response): Promise<void> {
+		const userId = req.userId;
+		const unblockUserId = req.params.id;
 
-  try {
-    if (!userId) {
-      res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
-      return;
-    }
+		try {
+			if (!userId) {
+				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+				return;
+			}
 
-    if (userId === unblockUserId) {
-      res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes desbloquearte a ti mismo' });
-      return;
-    }
+			if (userId === unblockUserId) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes desbloquearte a ti mismo' });
+				return;
+			}
 
-    const user = await this.user.findById(userId);
+			const user = await this.user.findById(userId);
 
-    if (!user) {
-      res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
-      return;
-    }
+			if (!user) {
+				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+				return;
+			}
 
-    // Verificar si el usuario está bloqueado
-    if (!user.blockedUsers.some((id) => id.equals(unblockUserId))) {
-      res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario no está bloqueado' });
-      return;
-    }
+			// Verificar si el usuario está bloqueado
+			if (!user.blockedUsers.some((id) => id.equals(unblockUserId))) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Este usuario no está bloqueado' });
+				return;
+			}
 
-    // Remover al usuario de la lista de usuarios bloqueados
-    user.blockedUsers = user.blockedUsers.filter((id) => !id.equals(unblockUserId));
+			// Remover al usuario de la lista de usuarios bloqueados
+			user.blockedUsers = user.blockedUsers.filter((id) => !id.equals(unblockUserId));
 
-    await user.save();
+			await user.save();
 
-    res.status(StatusCodes.OK).json({ message: 'Usuario desbloqueado' });
-  } catch (error) {
-    console.error('Error al desbloquear al usuario:', error);
-    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al desbloquear al usuario', error });
-  }
-}
+			res.status(StatusCodes.OK).json({ message: 'Usuario desbloqueado' });
+		} catch (error) {
+			console.error('Error al desbloquear al usuario:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al desbloquear al usuario', error });
+		}
+	}
 
 }
 
