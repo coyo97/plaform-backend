@@ -291,6 +291,27 @@ export class SocketController {
 		socket.on('ice-candidate', (streamId: string, candidate: any) => {
 			socket.to(streamId).emit('ice-candidate', candidate); // Emitir candidato ICE
 		});
+		// Eventos para la compartición de pantalla
+		socket.on('screen-share-offer', (data) => {
+			const { streamId, offer } = data;
+			socket.to(streamId).emit('screen-share-offer', { senderSocketId: socket.id, offer });
+		});
+
+		socket.on('screen-share-answer', (data) => {
+			const { streamId, answer } = data;
+			socket.to(streamId).emit('screen-share-answer', { senderSocketId: socket.id, answer });
+		});
+
+		socket.on('screen-share-ice-candidate', (data) => {
+			const { streamId, candidate } = data;
+			socket.to(streamId).emit('screen-share-ice-candidate', { senderSocketId: socket.id, candidate });
+		});
+
+		// Manejar la desconexión
+		socket.on('disconnect', () => {
+			console.log(`Usuario desconectado: ${userId}`);
+			this.connectedUsers.delete(userId);
+		});
 	}
 	public async emitMessageDeletion(
 		messageId: string,

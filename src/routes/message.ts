@@ -121,6 +121,8 @@ export class MessageController {
 			  currentUserId,
 			  userId,
 			  });*/
+			const { skip = 0, limit = 10 } = req.query;
+
 			const messages = await this.messageModel
 			.find({
 				$or: [
@@ -129,6 +131,8 @@ export class MessageController {
 				],
 			})
 			.sort({ createdAt: 1 })
+			.skip(Number(skip))
+			.limit(Number(limit))
 			.populate({
 				path: 'sender',
 				select: 'username', // Puedes agregar otros campos si lo deseas
@@ -139,6 +143,8 @@ export class MessageController {
 			})
 			.select('sender receiver content isGroupMessage groupId isRead createdAt filePath fileType') // Incluir todos los campos necesarios
 			.exec();
+			// Revertir el orden para que estén en orden cronológico
+			//messages.reverse();
 			//	console.log('Mensajes devueltos:', messages);
 			return res.status(StatusCodes.OK).json({ messages });
 		} catch (error) {
@@ -152,7 +158,8 @@ export class MessageController {
 			const { groupId } = req.params;
 			const messages = await this.messageModel
 			.find({ groupId: groupId, isGroupMessage: true })
-			.sort({ createdAt: 1 })
+			.sort({ createdAt: -1 })
+			.limit(10)
 			.populate({
 				path: 'sender',
 				select: 'username',
@@ -163,6 +170,8 @@ export class MessageController {
 			})
 			.exec();
 
+			 // Revertir el orden para que estén en orden cronológico
+    messages.reverse();
 			return res.status(StatusCodes.OK).json({ messages });
 		} catch (error) {
 			console.error('Error al obtener los mensajes del grupo:', error);

@@ -98,7 +98,7 @@ export class PublicationController {
 
 		// Ruta para actualizar una publicación existente
 		this.app.getAppServer().put(
-			`${this.route}/publications`,
+			`${this.route}/user-publications/:id`,
 			authMiddleware,
 			async (req, res, next) => {
 				// Obtén el maxUploadSize desde la base de datos
@@ -751,7 +751,5 @@ export class PublicationController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al listar las publicaciones más comentadas', error });
 		}
 	}
-
-
 }
 

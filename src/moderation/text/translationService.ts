@@ -1,6 +1,7 @@
 import axios from 'axios';
+import { parseEnvString } from '../../utils';
 
-const TRANSLATE_API_URL = 'http://127.0.0.1:5000/translate';
+const TRANSLATE_API_URL = parseEnvString('TRANSLATE_API_URL');
 
 export async function translateText(text: string, targetLanguage: string): Promise<string> {
   try {

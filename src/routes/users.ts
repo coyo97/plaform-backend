@@ -13,6 +13,11 @@ import mongoose from 'mongoose';
 import { NotificationModel } from './schemas/notification';
 import SocketController from './socket'; 
 
+import crypto from 'crypto';
+import nodemailer from 'nodemailer';
+import {parseEnvString, parseEnvNumber} from "../utils";
+import SMTPTransport from 'nodemailer/lib/smtp-transport';
+
 interface AuthRequest extends Request {
 	userId?: string;
 }
@@ -28,6 +33,7 @@ export class UserController {
 	private user: Model<IUser>;
 	private notificationModel: ReturnType<typeof NotificationModel>;
 	private socketController: SocketController;
+	private transporter: nodemailer.Transporter;
 
 	constructor(app: App, route: string, socketController: SocketController) {
 		this.route = route;
@@ -37,6 +43,15 @@ export class UserController {
 		this.notificationModel = NotificationModel(this.app.getClientMongoose());
 		this.socketController = socketController;
 		this.initRoutes();
+		// Configuración de nodemailer para MailHog
+		const smtpOptions: SMTPTransport.Options = {
+			host: parseEnvString('MAILHOG_HOST') || 'localhost', // MailHog se ejecuta en localhost
+			port: parseEnvNumber('MAILHOG_PORT') || 1025,        // Puerto SMTP de MailHog
+			secure: false,     // MailHog no utiliza conexión segura
+			// No es necesario especificar 'auth' si no se requiere autenticación
+		};
+
+		this.transporter = nodemailer.createTransport(smtpOptions);
 		console.log(`User Controller initialized at ${this.route}`);
 	}
 
@@ -75,6 +90,9 @@ export class UserController {
 		// Ruta para enviar una solicitud de amistad
 		this.express.post(`${this.route}/:id/send-friend-request`, authMiddleware,adminMiddleware, this.sendFriendRequest.bind(this));
 
+		// Ruta para cancelar una solicitud de amistad
+		this.express.post(`${this.route}/:id/cancel-friend-request`, authMiddleware, this.cancelFriendRequest.bind(this));
+
 		// Ruta para aceptar una solicitud de amistad
 		this.express.post(`${this.route}/:id/accept-friend-request`, authMiddleware, this.acceptFriendRequest.bind(this));
 
@@ -98,6 +116,9 @@ export class UserController {
 		// Ruta para desbloquear a un usuario
 		this.express.post(`${this.route}/:id/unblock`, authMiddleware, this.unblockUser.bind(this));
 
+		this.express.put(`${this.route}/:id/bulk-action`,authMiddleware, adminMiddleware, this.bulkAction.bind(this));
+		this.express.post(`${this.route}/forgot-password`, this.forgotPassword.bind(this));
+		this.express.post(`${this.route}/reset-password/:token`, this.resetPassword.bind(this));
 
 		// Inicializar la ruta de login
 		this.initLoginRoute();
@@ -106,13 +127,14 @@ export class UserController {
 	private async getUsers(req: Request, res: Response): Promise<void> {
 		try {
 			const list = await this.user.find()
-			.select('username email roles status reportCount') // Selecciona los campos que necesitas
+			.select('username email roles status reportCount careers') // Selecciona los campos que necesitas
 			//o podemos comentar el select y se mostrara todos los campos
 			.populate({
 				path: 'profile',
 				select: 'profilePicture',
 			})
-			.populate('roles');
+			.populate('roles')
+			.populate('careers');
 			res.status(StatusCodes.ACCEPTED).json({list});
 		} catch (error) {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
@@ -222,7 +244,7 @@ export class UserController {
 		const { email, password } = req.body;
 
 		try {
-			const user = await this.user.findOne({ email }).exec();
+			const user = await this.user.findOne({ email }).populate('roles');
 			if (!user) {
 				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no encontrado' });
 				return;
@@ -244,9 +266,14 @@ export class UserController {
 				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Contraseña incorrecta' });
 				return;
 			}
-
+			// Verificar si el usuario tiene roles asignados
+			if (!user.roles || user.roles.length === 0) {
+				res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes roles asignados. Contacta al administrador.' });
+				return;
+			}
 			const token = generateToken(user._id.toString());
-			res.status(StatusCodes.OK).json({ token, userId: user._id });
+			const roleNames = user.roles.map(role => role.name);
+			res.status(StatusCodes.OK).json({ token, userId: user._id,  roles: roleNames });
 		} catch (error) {
 			console.error('Error logging in:', error);
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });
@@ -391,6 +418,57 @@ export class UserController {
 		}
 
 	}
+
+	private async cancelFriendRequest(req: AuthRequest, res: Response): Promise<void> {
+		const senderId = req.userId;
+		const receiverId = req.params.id;
+
+		try {
+			if (!senderId) {
+				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no autenticado' });
+				return;
+			}
+
+			if (senderId === receiverId) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No puedes cancelar una solicitud a ti mismo' });
+				return;
+			}
+
+			const sender = await this.user.findById(senderId);
+			const receiver = await this.user.findById(receiverId);
+
+			if (!sender || !receiver) {
+				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
+				return;
+			}
+
+			// Verificar si hay una solicitud de amistad pendiente
+			if (!receiver.friendRequests.includes(sender._id)) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'No has enviado una solicitud a este usuario' });
+				return;
+			}
+
+			// Eliminar la solicitud de amistad del receptor
+			receiver.friendRequests = receiver.friendRequests.filter(
+				(id) => !id.equals(sender._id)
+			);
+			await receiver.save();
+
+			// Opcional: Eliminar notificaciones relacionadas
+			await this.notificationModel.deleteMany({
+				recipient: receiver._id,
+				sender: sender._id,
+				type: 'friend_request',
+			});
+
+			res.status(StatusCodes.OK).json({ message: 'Solicitud de amistad cancelada' });
+		} catch (error) {
+			console.error('Error al cancelar la solicitud de amistad:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al cancelar la solicitud de amistad', error });
+		}
+	}
+
+
 	private async acceptFriendRequest(req: AuthRequest, res: Response): Promise<void> {
 		const receiverId = req.userId;
 		const senderId = req.params.id;
@@ -529,7 +607,14 @@ export class UserController {
 			}
 
 			const user = await this.user.findById(userId)
-			.populate('friends', 'username email')
+			.populate({
+				path: 'friends',
+				select: 'username email',
+				populate: {
+					path: 'profile',
+					select: 'profilePicture',
+				},
+			})
 			.exec();
 
 			if (!user) {
@@ -543,6 +628,7 @@ export class UserController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al obtener la lista de amigos', error });
 		}
 	}
+
 	private async searchUsers(req: AuthRequest, res: Response): Promise<void> {
 		try {
 			const searchQuery = req.query.q as string;
@@ -746,6 +832,123 @@ export class UserController {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al desbloquear al usuario', error });
 		}
 	}
+	private async forgotPassword(req: Request, res: Response): Promise<void> {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			res.status(StatusCodes.BAD_REQUEST).json({ errors: errors.array() });
+			return;
+		}
 
+		const { email } = req.body;
+		try {
+			const user = await this.user.findOne({ email }).exec();
+			if (!user) {
+				// No revelar si el usuario existe por seguridad
+				res.status(StatusCodes.OK).json({ message: 'Si el email está registrado, se enviará un correo para restablecer la contraseña' });
+				return;
+			}
+
+			// Generar token de restablecimiento
+			const token = crypto.randomBytes(20).toString('hex');
+
+			// Establecer token y expiración en el usuario
+			user.resetPasswordToken = token;
+			user.resetPasswordExpires = new Date(Date.now() + 3600000); // 1 hora
+
+			await user.save();
+
+			// Enviar email con el enlace de restablecimiento
+			const resetURL = `http://localhost:3000/reset-password/${token}`; // Cambia 'localhost:3000' por tu URL de frontend
+
+				const mailOptions = {
+				to: user.email,
+				from: 'no-reply@tu-dominio.com',
+				subject: 'Restablecimiento de contraseña',
+				text: `Estás recibiendo este correo porque tú (u otra persona) solicitó restablecer la contraseña de tu cuenta.\n\n
+				Por favor, haz clic en el siguiente enlace o pégalo en tu navegador para completar el proceso:\n\n
+				${resetURL}\n\n
+				Si no solicitaste este correo, por favor ignóralo y tu contraseña permanecerá sin cambios.\n`,
+			};
+
+			await this.transporter.sendMail(mailOptions);
+
+			res.status(StatusCodes.OK).json({ message: 'Correo de restablecimiento enviado' });
+		} catch (error) {
+			console.error('Error en forgotPassword:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });
+		}
+	}
+
+	// Método para manejar el restablecimiento de contraseña
+	private async resetPassword(req: Request, res: Response): Promise<void> {
+		const errors = validationResult(req);
+		if (!errors.isEmpty()) {
+			res.status(StatusCodes.BAD_REQUEST).json({ errors: errors.array() });
+			return;
+		}
+
+		const { token } = req.params;
+		const { password } = req.body;
+
+		try {
+			const user = await this.user.findOne({
+				resetPasswordToken: token,
+				resetPasswordExpires: { $gt: new Date() },
+			}).exec();
+
+			if (!user) {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Token inválido o expirado' });
+				return;
+			}
+
+			// Hashear la nueva contraseña
+			const saltRounds = 10;
+			const hashedPassword = await bcrypt.hash(password, saltRounds);
+
+			// Actualizar la contraseña y limpiar los campos de restablecimiento
+			user.password = hashedPassword;
+			user.resetPasswordToken = undefined;
+			user.resetPasswordExpires = undefined;
+
+			await user.save();
+
+			res.status(StatusCodes.OK).json({ message: 'Contraseña restablecida correctamente' });
+		} catch (error) {
+			console.error('Error en resetPassword:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });
+		}
+	}
+	private async bulkAction(req: Request, res: Response): Promise<void> {
+		const { userIds, action } = req.body;
+
+		if (!Array.isArray(userIds) || !action) {
+			res.status(StatusCodes.BAD_REQUEST).json({ message: 'Datos inválidos' });
+			return;
+		}
+
+		try {
+			let statusToSet = '';
+			if (action === 'deactivate') {
+				statusToSet = 'deactivated';
+			} else if (action === 'reactivate') {
+				statusToSet = 'active';
+			} else if (action === 'blacklist') {
+				statusToSet = 'blacklisted';
+			} else {
+				res.status(StatusCodes.BAD_REQUEST).json({ message: 'Acción inválida' });
+				return;
+			}
+
+			await this.user.updateMany(
+				{ _id: { $in: userIds } },
+				{ $set: { status: statusToSet } }
+			);
+
+			res.status(StatusCodes.OK).json({ message: 'Usuarios actualizados exitosamente' });
+		} catch (error) {
+			console.error('Error en bulkAction:', error);
+			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al procesar la solicitud', error });
+		}
+	}
 }
 

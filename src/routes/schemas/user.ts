@@ -16,6 +16,8 @@ export interface IUser extends Document {
 	reportCount: number;
 	uniqueReporters: Types.ObjectId[];
 	blockedUsers: Types.ObjectId[]; // Opción alternativa
+	resetPasswordToken?: string;
+	resetPasswordExpires?: Date;
 }
 
 const userSchema: Schema<IUser> = new Schema({
@@ -31,6 +33,8 @@ const userSchema: Schema<IUser> = new Schema({
 	reportCount: { type: Number, default: 0 },
 	uniqueReporters: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
 	blockedUsers: [{ type: mongoose.Types.ObjectId, ref: 'User' }], // Añade esto
+	resetPasswordToken: { type: String },
+	resetPasswordExpires: { type: Date },
 });
 
 userSchema.virtual('profile', {

@@ -5,6 +5,7 @@ export interface IStream extends Document {
     userId: string;
     streamKey: string;
     active: boolean;
+	isScreenSharing: boolean;
 }
 
 const StreamSchema: Schema = new Schema({
@@ -12,6 +13,7 @@ const StreamSchema: Schema = new Schema({
     userId: { type: String, required: true },
     streamKey: { type: String, required: true },
     active: { type: Boolean, default: true },
+	isScreenSharing: { type: Boolean, default: false }, // Nuevo campo
 });
 
 export const StreamModel: Model<IStream> = model<IStream>('Stream', StreamSchema);

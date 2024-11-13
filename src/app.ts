@@ -92,7 +92,7 @@ export default class App {
 		// Pasar socketController a MessageController y NotificationController
 		new MessageController(this, `/${this.apiVersion}/${this.apiPrefix}`,  this.socketController);
 		new GroupController(this, `/${this.apiVersion}/${this.apiPrefix}`);
-		new StreamController( this, `/${this.apiVersion}/${this.apiPrefix}`);
+		new StreamController( this, `/${this.apiVersion}/${this.apiPrefix}`, this.socketController);
 		new NotificationController(this, `/${this.apiVersion}/${this.apiPrefix}`,  this.socketController);
 		new FileFormatController(this, `/${this.apiVersion}/${this.apiPrefix}`);
 		new SettingsController(this, `/${this.apiVersion}/${this.apiPrefix}`);

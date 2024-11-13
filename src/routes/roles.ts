@@ -35,6 +35,7 @@ export class RoleController {
 				body('name').notEmpty().withMessage('El nombre es obligatorio'),
 				body('description').optional().isString(),
 				body('permissions').isArray().withMessage('Los permisos deben ser un array'),
+				body('permissions.*.name').notEmpty().withMessage('El nombre del permiso es obligatorio'),
 				body('permissions.*.module').notEmpty().withMessage('El módulo es obligatorio'),
 				body('permissions.*.action').notEmpty().withMessage('La acción es obligatoria'),
 			],
