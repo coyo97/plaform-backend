@@ -115,12 +115,8 @@ export class MessageController {
 	// Método para obtener mensajes de un usuario específico
 	private async getMessages(req: AuthRequest, res: Response): Promise<Response> {
 		try {
-			const { userId } = req.params; // Usuario para obtener mensajes
-			const currentUserId = req.userId; // Usuario autenticado
-			/*console.log('Obteniendo mensajes con los siguientes parámetros:', {
-			  currentUserId,
-			  userId,
-			  });*/
+			const { userId } = req.params;
+			const currentUserId = req.userId;
 			const { skip = 0, limit = 10 } = req.query;
 
 			const messages = await this.messageModel
@@ -130,22 +126,20 @@ export class MessageController {
 					{ sender: userId, receiver: currentUserId },
 				],
 			})
-			.sort({ createdAt: 1 })
+			.sort({ createdAt: -1 }) // Orden descendente
 			.skip(Number(skip))
 			.limit(Number(limit))
 			.populate({
 				path: 'sender',
-				select: 'username', // Puedes agregar otros campos si lo deseas
+				select: 'username',
 				populate: {
 					path: 'profile',
-					select: 'profilePicture', // Solo necesitamos el campo profilePicture
+					select: 'profilePicture',
 				},
 			})
-			.select('sender receiver content isGroupMessage groupId isRead createdAt filePath fileType') // Incluir todos los campos necesarios
+			.select('sender receiver content isGroupMessage groupId isRead createdAt filePath fileType')
 			.exec();
-			// Revertir el orden para que estén en orden cronológico
-			//messages.reverse();
-			//	console.log('Mensajes devueltos:', messages);
+
 			return res.status(StatusCodes.OK).json({ messages });
 		} catch (error) {
 			console.error('Error al obtener los mensajes:', error);
@@ -170,8 +164,8 @@ export class MessageController {
 			})
 			.exec();
 
-			 // Revertir el orden para que estén en orden cronológico
-    messages.reverse();
+			// Revertir el orden para que estén en orden cronológico
+			messages.reverse();
 			return res.status(StatusCodes.OK).json({ messages });
 		} catch (error) {
 			console.error('Error al obtener los mensajes del grupo:', error);

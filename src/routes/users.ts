@@ -88,7 +88,7 @@ export class UserController {
 		this.express.put(`${this.route}/:id/blacklist`, authMiddleware, adminMiddleware, this.blacklistUser.bind(this));
 
 		// Ruta para enviar una solicitud de amistad
-		this.express.post(`${this.route}/:id/send-friend-request`, authMiddleware,adminMiddleware, this.sendFriendRequest.bind(this));
+		this.express.post(`${this.route}/:id/send-friend-request`, authMiddleware, this.sendFriendRequest.bind(this));
 
 		// Ruta para cancelar una solicitud de amistad
 		this.express.post(`${this.route}/:id/cancel-friend-request`, authMiddleware, this.cancelFriendRequest.bind(this));
@@ -126,16 +126,58 @@ export class UserController {
 	// Método para obtener la lista de usuarios
 	private async getUsers(req: Request, res: Response): Promise<void> {
 		try {
-			const list = await this.user.find()
-			.select('username email roles status reportCount careers') // Selecciona los campos que necesitas
-			//o podemos comentar el select y se mostrara todos los campos
+			// Obtener los parámetros de paginación de la consulta
+			const page = parseInt(req.query.page as string) || 1; // Página actual, por defecto 1
+			const limit = parseInt(req.query.limit as string) || 10; // Usuarios por página, por defecto 10
+			// Calcular el número de documentos a saltar
+			const skip = (page - 1) * limit;
+
+			// Obtener filtros de la consulta
+			const { status, career, search } = req.query;
+
+			// Construir el objeto de búsqueda
+			const query: any = {};
+
+			if (status) {
+				query.status = status;
+			}
+
+			if (career) {
+				query.careers = { $in: [career] }; // Filtra usuarios que tienen la carrera seleccionada
+			}
+
+			if (search) {
+				const searchRegex = new RegExp(search as string, 'i');
+				query.$or = [
+					{ username: searchRegex },
+					{ email: searchRegex },
+				];
+			}
+
+			// Obtener el total de usuarios que coinciden con el filtro
+			const totalUsers = await this.user.countDocuments(query);
+
+			// Obtener los usuarios paginados y filtrados
+			const list = await this.user.find(query)
+			.select('username email roles status reportCount careers')
 			.populate({
 				path: 'profile',
 				select: 'profilePicture',
 			})
 			.populate('roles')
-			.populate('careers');
-			res.status(StatusCodes.ACCEPTED).json({list});
+			.populate('careers')
+			.skip(skip)
+			.limit(limit);
+
+			// Calcular el número total de páginas
+			const totalPages = Math.ceil(totalUsers / limit);
+
+			res.status(StatusCodes.OK).json({
+				list,
+				currentPage: page,
+				totalPages,
+				totalUsers,
+			});
 		} catch (error) {
 			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
 		}

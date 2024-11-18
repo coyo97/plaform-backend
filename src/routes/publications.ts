@@ -59,6 +59,32 @@ export class PublicationController {
 			authMiddleware, // Asegura autenticación para ver publicaciones
 			this.listPublications.bind(this)
 		);
+		// Ruta para obtener las publicaciones del usuario autenticado
+		this.app.getAppServer().get(
+			`${this.route}/user-publications`, // Nueva ruta
+			authMiddleware,
+			this.listUserPublications.bind(this) // Llama al método que filtra por usuario autenticado
+		);
+		// Ruta para buscar publicaciones
+		this.app.getAppServer().get(
+			`${this.route}/publications/search`,
+			authMiddleware,
+			this.searchPublications.bind(this)
+		);
+		// Ruta para obtener el estado actual del moderador de IA
+		this.app.getAppServer().get(
+			`${this.route}/moderation-status`,
+			authMiddleware,
+			this.getModerationStatus.bind(this)
+		);
+
+		// Ruta para actualizar el estado del moderador de IA
+		this.app.getAppServer().put(
+			`${this.route}/moderation-status`,
+			authMiddleware,
+			this.updateModerationStatus.bind(this)
+		);
+
 		//esta rutas deben ir mas antes que las rutas genericas: ej. /publications/:id.
 
 		// Ruta para listar publicaciones más gustadas
@@ -87,13 +113,6 @@ export class PublicationController {
 			`${this.route}/publications/:id`,
 			authMiddleware,
 			this.deletePublication.bind(this)
-		);
-
-		// Ruta para obtener las publicaciones del usuario autenticado
-		this.app.getAppServer().get(
-			`${this.route}/user-publications`, // Nueva ruta
-			authMiddleware,
-			this.listUserPublications.bind(this) // Llama al método que filtra por usuario autenticado
 		);
 
 		// Ruta para actualizar una publicación existente
@@ -140,19 +159,6 @@ export class PublicationController {
 			this.listPublicationsByCareer.bind(this)
 		);
 
-		// Ruta para obtener el estado actual del moderador de IA
-		this.app.getAppServer().get(
-			`${this.route}/moderation-status`,
-			authMiddleware,
-			this.getModerationStatus.bind(this)
-		);
-
-		// Ruta para actualizar el estado del moderador de IA
-		this.app.getAppServer().put(
-			`${this.route}/moderation-status`,
-			authMiddleware,
-			this.updateModerationStatus.bind(this)
-		);
 		// Ruta para reportar una publicación
 		this.app.getAppServer().post(
 			`${this.route}/publications/:publicationId/report`,
@@ -174,12 +180,7 @@ export class PublicationController {
 			this.unlikePublication.bind(this)
 		);
 
-		// Ruta para buscar publicaciones
-		this.app.getAppServer().get(
-			`${this.route}/publications/search`,
-			authMiddleware,
-			this.searchPublications.bind(this)
-		);
+
 	}
 
 	// Método para listar todas las publicaciones
