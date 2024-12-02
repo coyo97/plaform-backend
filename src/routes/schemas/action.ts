@@ -9,5 +9,6 @@ const ActionSchema = new Schema<IAction>({
   name: { type: String, required: true, unique: true },
 });
 
-export const ActionModel = (mongoose: typeof import('mongoose')) => mongoose.model<IAction>('Action', ActionSchema);
+export const ActionModel = (mongoose: typeof import('mongoose')) =>
+  mongoose.model<IAction>('Action', ActionSchema);
 

@@ -4,31 +4,97 @@ import { StatusCodes } from 'http-status-codes';
 import { UserModel } from '../routes/schemas/user';
 import App from '../app';
 
-export const permissionMiddleware = (module: string, action: string) => {
-  return async (req: Request, res: Response, next: NextFunction) => {
-    const userId = (req as any).userId;
+interface AuthRequest extends Request {
+  userId?: string;
+  userPermissions?: Set<string>;
+}
+interface Module {
+  name: string;
+}
 
-    try {
-      const app = req.app.get('appInstance') as App;
-      const user = await UserModel(app.getClientMongoose()).findById(userId).populate('roles').exec();
+interface Action {
+  name: string;
+}
 
-      if (!user) {
-        return res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no encontrado' });
-      }
+interface Permission {
+  module: Module;
+  action: Action;
+}
 
-      const hasPermission = user.roles.some(role =>
-        role.permissions.some(permission => permission.module === module && permission.action === action)
-      );
+interface Role {
+  permissions: Permission[];
+}
 
-      if (!hasPermission) {
-        return res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes permiso para realizar esta acción' });
-      }
+interface User {
+  roles: Role[];
+}
 
-      next();
-    } catch (error) {
-      console.error('Error en permissionMiddleware:', error);
-      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ message: 'Error al verificar permisos', error });
-    }
-  };
+
+export const dynamicPermissionMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
+  if (!req.userPermissions) {
+    return res.status(StatusCodes.FORBIDDEN).json({ message: 'No se cargaron los permisos del usuario' });
+  }
+
+  // Inferir el permiso requerido
+  const requiredPermission = inferPermission(req);
+  console.log('Permiso requerido:', requiredPermission);
+
+  if (!requiredPermission) {
+    // Si no se pudo inferir un permiso, se permite el acceso (puedes ajustar esto según tus necesidades)
+    return next();
+  }
+
+  if (req.userPermissions.has(requiredPermission)) {
+    return next();
+  } else {
+    console.warn(`Permiso '${requiredPermission}' no encontrado en los permisos del usuario.`);
+    return res.status(StatusCodes.FORBIDDEN).json({ message: 'No tienes permiso para realizar esta acción' });
+  }
 };
+
+// Función para inferir el permiso requerido
+const inferPermission = (req: Request): string | null => {
+  const method = req.method;
+  const fullPath = req.originalUrl; // URL completa solicitada
+
+  // Remover query parameters
+  const urlWithoutQuery = fullPath.split('?')[0];
+
+  // Dividir en segmentos
+  const pathSegments = urlWithoutQuery.split('/').filter(segment => !segment.startsWith(':') && segment !== '');
+
+  // Encontrar el índice del segmento 'api' y tomar el siguiente como el módulo
+  const apiIndex = pathSegments.indexOf('api');
+  if (apiIndex === -1 || apiIndex + 1 >= pathSegments.length) {
+    console.warn('No se pudo determinar el módulo desde la ruta:', fullPath);
+    return null;
+  }
+
+  const moduleName = capitalize(pathSegments[apiIndex + 1]); // Segmento después de 'api'
+
+  // Mapear el método HTTP a una acción
+  const actionMap: Record<string, string> = {
+    GET: 'Read',
+    POST: 'Create',
+    PUT: 'Update',
+    PATCH: 'Update',
+    DELETE: 'Delete',
+  };
+
+  const actionName = actionMap[method];
+
+  if (!actionName) {
+    // Método HTTP no soportado
+    return null;
+  }
+
+  // Construir el nombre del permiso
+  const permission = `${moduleName}:${actionName}`;
+
+  console.log(`Inferido permiso requerido: ${permission}`);
+  return permission;
+};
+
+// Función auxiliar para capitalizar la primera letra
+const capitalize = (s: string) => s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 

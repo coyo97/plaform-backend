@@ -9,5 +9,6 @@ const ModuleSchema = new Schema<IModule>({
   name: { type: String, required: true, unique: true },
 });
 
-export const ModuleModel = (mongoose: typeof import('mongoose')) => mongoose.model<IModule>('Module', ModuleSchema);
+export const ModuleModel = (mongoose: typeof import('mongoose')) =>
+  mongoose.model<IModule>('Module', ModuleSchema);
 

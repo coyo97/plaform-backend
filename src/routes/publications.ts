@@ -11,6 +11,7 @@ import { ReportModel } from './schemas/report';
 import mongoose, { Schema, Document, Types } from 'mongoose'; // Asegúrate de que mongoose está importado
 import { analyzeImage } from '../moderation/images/nudenetService';
 import { SettingsModel } from './schemas/settings';
+import {dynamicPermissionMiddleware} from '../middlware/permissionMiddleware';
 
 interface AuthRequest extends Request {
 	userId?: string;
@@ -56,7 +57,7 @@ export class PublicationController {
 
 		this.app.getAppServer().get(
 			`${this.route}/publications`,
-			authMiddleware, // Asegura autenticación para ver publicaciones
+			authMiddleware, dynamicPermissionMiddleware,// Asegura autenticación para ver publicaciones
 			this.listPublications.bind(this)
 		);
 		// Ruta para obtener las publicaciones del usuario autenticado

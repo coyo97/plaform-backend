@@ -1,32 +1,19 @@
 // src/routes/schemas/role.ts
 import { Schema, model, Document } from 'mongoose';
+import { IPermission } from './permission';
 
 export interface IRole extends Document {
   name: string;
   description?: string;
-  permissions: IPermission[];
+  permissions: IPermission['_id'][];
 }
-
-export interface IPermission {
-  module: string;
-  action: string;
-  name: string;
-  description: string;
-}
-
-const permissionSchema = new Schema<IPermission>({
-  module: { type: String, required: true },
-  action: { type: String, required: true },
-  name: { type: String, required: true }, // Asegura que 'name' es requerido
-  description: { type: String },
-});
-
 
 const roleSchema = new Schema<IRole>({
   name: { type: String, required: true, unique: true },
   description: { type: String },
-  permissions: [permissionSchema],
+  permissions: [{ type: Schema.Types.ObjectId, ref: 'Permission' }],
 });
 
-export const RoleModel = (mongoose: typeof import('mongoose')) => mongoose.model<IRole>('Role', roleSchema);
+export const RoleModel = (mongoose: typeof import('mongoose')) =>
+  mongoose.model<IRole>('Role', roleSchema);
 

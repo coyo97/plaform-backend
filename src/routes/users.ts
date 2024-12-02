@@ -17,6 +17,10 @@ import crypto from 'crypto';
 import nodemailer from 'nodemailer';
 import {parseEnvString, parseEnvNumber} from "../utils";
 import SMTPTransport from 'nodemailer/lib/smtp-transport';
+import { PermissionModel } from "./schemas/permission";
+import { ModuleModel } from "./schemas/module";
+import { ActionModel } from "./schemas/action";
+import {dynamicPermissionMiddleware} from "../middlware/permissionMiddleware";
 
 interface AuthRequest extends Request {
 	userId?: string;
@@ -124,107 +128,128 @@ export class UserController {
 		this.initLoginRoute();
 	}
 	// Método para obtener la lista de usuarios
-	private async getUsers(req: Request, res: Response): Promise<void> {
-		try {
-			// Obtener los parámetros de paginación de la consulta
-			const page = parseInt(req.query.page as string) || 1; // Página actual, por defecto 1
-			const limit = parseInt(req.query.limit as string) || 10; // Usuarios por página, por defecto 10
-			// Calcular el número de documentos a saltar
-			const skip = (page - 1) * limit;
+// Método para obtener la lista de usuarios
+private async getUsers(req: Request, res: Response): Promise<void> {
+  try {
+    // Nuevo parámetro para desactivar la paginación
+    const noPagination = req.query.noPagination === 'true';
 
-			// Obtener filtros de la consulta
-			const { status, career, search } = req.query;
+    // Obtener los parámetros de paginación de la consulta si no se desactiva la paginación
+    const page = noPagination ? 1 : parseInt(req.query.page as string) || 1;
+    const limit = noPagination ? 0 : parseInt(req.query.limit as string) || 10; // Si limit es 0, Mongoose devuelve todos los documentos
+    const skip = (page - 1) * limit;
 
-			// Construir el objeto de búsqueda
-			const query: any = {};
+    // Construir el objeto de búsqueda
+    const query: any = { /* filtros */ };
 
-			if (status) {
-				query.status = status;
-			}
+    // Obtener el total de usuarios que coinciden con el filtro
+    const totalUsers = await this.user.countDocuments(query);
 
-			if (career) {
-				query.careers = { $in: [career] }; // Filtra usuarios que tienen la carrera seleccionada
-			}
+    // Obtener los usuarios paginados y filtrados
+    const list = await this.user.find(query)
+      .select('username email roles status reportCount careers')
+      .populate({
+        path: 'profile',
+        select: 'profilePicture',
+      })
+      .populate('roles')
+      .populate('careers')
+      .skip(skip)
+      .limit(limit); // Si limit es 0, no se aplica límite
 
-			if (search) {
-				const searchRegex = new RegExp(search as string, 'i');
-				query.$or = [
-					{ username: searchRegex },
-					{ email: searchRegex },
-				];
-			}
+    // Calcular el número total de páginas
+    const totalPages = limit > 0 ? Math.ceil(totalUsers / limit) : 1;
 
-			// Obtener el total de usuarios que coinciden con el filtro
-			const totalUsers = await this.user.countDocuments(query);
-
-			// Obtener los usuarios paginados y filtrados
-			const list = await this.user.find(query)
-			.select('username email roles status reportCount careers')
-			.populate({
-				path: 'profile',
-				select: 'profilePicture',
-			})
-			.populate('roles')
-			.populate('careers')
-			.skip(skip)
-			.limit(limit);
-
-			// Calcular el número total de páginas
-			const totalPages = Math.ceil(totalUsers / limit);
-
-			res.status(StatusCodes.OK).json({
-				list,
-				currentPage: page,
-				totalPages,
-				totalUsers,
-			});
-		} catch (error) {
-			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
-		}
-	}
+    res.status(StatusCodes.OK).json({
+      list,
+      currentPage: page,
+      totalPages,
+      totalUsers,
+    });
+  } catch (error) {
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "Error fetching users", error });
+  }
+}
 
 	// Método para registrar un nuevo usuario con carreras
-	private async registerUser(req: Request, res: Response): Promise<void> {
-		const { username, email, password, careers } = req.body;
-		const saltRounds = 10;
+// Método para registrar un nuevo usuario con carreras
+private async registerUser(req: Request, res: Response): Promise<void> {
+  const { username, email, password, careers } = req.body;
+  const saltRounds = 10;
 
-		try {
-			// Hashear la contraseña antes de guardar
-			const hashedPassword = await bcrypt.hash(password, saltRounds);
+  try {
+    // Hashear la contraseña antes de guardar
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
 
-			// Verificar y asignar el rol de usuario básico si no existe un rol específico
-			let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'user' }).exec();
+    // Verificar y asignar el rol de usuario básico si no existe un rol específico
+    let role: IRole | null = await RoleModel(this.app.getClientMongoose()).findOne({ name: 'user' }).exec();
 
-			if (!role) {
-				role = new (RoleModel(this.app.getClientMongoose()))({
-					name: 'user',
-					description: 'Usuario básico',
-					permissions: [{
-						name: 'basic_access',
-						description: 'Acceso básico',
-						module: 'general',  // Añade el campo 'module'
-						action: 'read',     // Añade el campo 'action'
-					}],
-				});
-				await role.save();
-			}
+    if (!role) {
+      // Crear el permiso básico
+      const PermissionModelInstance = PermissionModel(this.app.getClientMongoose());
 
-			// Asignar carreras seleccionadas y el rol encontrado o creado al usuario
-			const requestObject = { username, email, password: hashedPassword, roles: [role._id], careers, status: 'active' };
-			const newUser = new this.user(requestObject);
-			const result = await newUser.save();
+      // Obtener o crear el módulo 'General'
+      let moduleDoc = await ModuleModel(this.app.getClientMongoose()).findOne({ name: 'General' }).exec();
+      if (!moduleDoc) {
+        moduleDoc = new (ModuleModel(this.app.getClientMongoose()))({
+          name: 'General',
+          description: 'Módulo general',
+        });
+        await moduleDoc.save();
+      }
 
-			if (result) {
-				res.status(StatusCodes.CREATED).json({ msg: "User created", user: result });
-				return;
-			}
+      // Obtener o crear la acción 'Read'
+      let actionDoc = await ActionModel(this.app.getClientMongoose()).findOne({ name: 'Read' }).exec();
+      if (!actionDoc) {
+        actionDoc = new (ActionModel(this.app.getClientMongoose()))({
+          name: 'Read',
+          description: 'Acción de lectura',
+        });
+        await actionDoc.save();
+      }
 
-			res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
-		} catch (error) {
-			console.error('Error creating user:', error);
-			res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
-		}
-	}
+      const permission = new PermissionModelInstance({
+        module: moduleDoc._id,
+        action: actionDoc._id,
+        name: 'basic_access',
+        description: 'Acceso básico',
+      });
+
+      await permission.save();
+
+      // Crear el rol y asignar el permiso
+      role = new (RoleModel(this.app.getClientMongoose()))({
+        name: 'user',
+        description: 'Usuario básico',
+        permissions: [permission._id],
+      });
+      await role.save();
+    }
+
+    // Asignar carreras seleccionadas y el rol encontrado o creado al usuario
+    const requestObject = {
+      username,
+      email,
+      password: hashedPassword,
+      roles: [role._id],
+      careers,
+      status: 'active',
+    };
+    const newUser = new this.user(requestObject);
+    const result = await newUser.save();
+
+    if (result) {
+      res.status(StatusCodes.CREATED).json({ msg: "User created", user: result });
+      return;
+    }
+
+    res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({ msg: "User not created" });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(StatusCodes.BAD_REQUEST).json({ msg: "Error creating user", error });
+  }
+}
+
 
 	// Método para actualizar un usuario
 	private async updateUser(req: AuthRequest, res: Response): Promise<void> {
@@ -264,7 +289,17 @@ export class UserController {
 				return;
 			}
 
-			const user = await this.user.findById(userId); // Utilizar `this.user`
+			 const user = await this.user.findById(userId)
+            .populate({
+                path: 'roles',
+                populate: {
+                    path: 'permissions',
+                    populate: [
+                        { path: 'module', model: 'Module' },
+                        { path: 'action', model: 'Action' },
+                    ],
+                },
+            });
 			if (!user) {
 				res.status(StatusCodes.NOT_FOUND).json({ message: 'Usuario no encontrado' });
 				return;
@@ -286,7 +321,17 @@ export class UserController {
 		const { email, password } = req.body;
 
 		try {
-			const user = await this.user.findOne({ email }).populate('roles');
+			 const user = await this.user.findOne({ email })
+            .populate({
+                path: 'roles',
+                populate: {
+                    path: 'permissions',
+                    populate: [
+                        { path: 'module', model: 'Module' },
+                        { path: 'action', model: 'Action' },
+                    ],
+                },
+            });
 			if (!user) {
 				res.status(StatusCodes.UNAUTHORIZED).json({ message: 'Usuario no encontrado' });
 				return;

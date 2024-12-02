@@ -17,5 +17,6 @@ const PermissionSchema = new Schema<IPermission>({
   description: { type: String },
 });
 
-export const PermissionModel = (mongoose: typeof import('mongoose')) => mongoose.model<IPermission>('Permission', PermissionSchema);
+export const PermissionModel = (mongoose: typeof import('mongoose')) =>
+  mongoose.model<IPermission>('Permission', PermissionSchema);
 

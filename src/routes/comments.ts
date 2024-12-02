@@ -4,6 +4,7 @@ import { StatusCodes } from 'http-status-codes';
 import { CommentModel } from './schemas/comment';
 import App from '../app';
 import { authMiddleware, adminMiddleware } from '../middlware/authMiddlewares';
+import { dynamicPermissionMiddleware } from '../middlware/permissionMiddleware';
 
 import { analyzeComment } from '../moderation/text/toxicityService';
 import { translateText } from '../moderation/text/translationService';
@@ -33,44 +34,50 @@ export class CommentController {
 	}
 
 	private initRoutes(): void {
-		// Route to get comments for a specific publication
+		// Ruta para obtener comentarios de una publicación específica
 		this.app.getAppServer().get(
 			`${this.route}/publications/:publicationId/comments`,
 			authMiddleware,
+			dynamicPermissionMiddleware, 
 			this.getComments.bind(this)
 		);
 
-		// Route to create a comment for a specific publication
+		// Ruta para crear un comentario en una publicación específica
 		this.app.getAppServer().post(
 			`${this.route}/publications/:publicationId/comments`,
 			authMiddleware,
+			dynamicPermissionMiddleware,
 			this.createComment.bind(this)
 		);
 
-		// Route to edit a comment
+		// Ruta para editar un comentario
 		this.app.getAppServer().put(
 			`${this.route}/comments/:commentId`,
 			authMiddleware,
+			dynamicPermissionMiddleware,
 			this.editComment.bind(this)
 		);
 
-		// Route to delete a comment
+		// Ruta para eliminar un comentario
 		this.app.getAppServer().delete(
 			`${this.route}/comments/:commentId`,
 			authMiddleware,
+			dynamicPermissionMiddleware,
 			this.deleteComment.bind(this)
 		);
-		// Ruta para obtener el estado actual del moderador de comentarios
+
+		// Rutas para el estado del moderador de comentarios
 		this.app.getAppServer().get(
 			`${this.route}/comment-moderation-status`,
 			authMiddleware,
+			dynamicPermissionMiddleware,
 			this.getCommentModerationStatus.bind(this)
 		);
 
-		// Ruta para actualizar el estado del moderador de comentarios
 		this.app.getAppServer().put(
 			`${this.route}/comment-moderation-status`,
 			authMiddleware,
+			dynamicPermissionMiddleware,
 			this.updateCommentModerationStatus.bind(this)
 		);
 
